@@ -5,6 +5,8 @@
 .env.test.local
 .env.production.local
 
+*.venv/
+
 # Dependencies
 node_modules/
 __pycache__/
@@ -42,7 +44,7 @@ redis_data/
 out/
 
 # Python
-venv/
+**/venv/
 env/
 .pytest_cache/
 
