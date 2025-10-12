@@ -15,7 +15,8 @@ class User(Base):
     hashed_password = sa.Column(sa.String)
     is_active = sa.Column(sa.Boolean, default=True)
     created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
-    
+    app_key= sa.Column(sa.String, unique=True)
+    app_secret= sa.Column(sa.String, unique=True)
     trading_plans = relationship("TradingPlan", back_populates="user")
 
 
