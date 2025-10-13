@@ -9,11 +9,12 @@ import TradeCard from '@/components/trade-card'
 // 실제 주식 데이터 조회 함수
 // Next.js API route를 통해 프록시로 백엔드 호출 (상대 경로 사용)
 const fetchStocks = async () => {
-  const response = await fetch('/api/stocks')
-  if (!response.ok) {
-    throw new Error('주식 데이터 조회 실패')
-  }
-  return response.json()
+  // const response = await fetch('/api/stocks')
+  // if (!response.ok) {
+  //   throw new Error('주식 데이터 조회 실패')
+  // }
+  // return response.json()
+  return []
 }
 
 // 실제 매매 내역 조회 함수
