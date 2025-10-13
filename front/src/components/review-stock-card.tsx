@@ -1,4 +1,8 @@
-import TradeInfo from './trade-info';
+import { Calendar, TrendingUp, TrendingDown, FileText, BarChart3 } from 'lucide-react'
+import TradeInfo from './trade-info'
+import StockCandlestickChart from './stock-candlestick-chart'
+import { useCurrentPrice } from '@/lib/hooks/use-current-price'
+import { useChartData } from '@/lib/hooks/use-chart-data'
 
 interface TradingRecord {
   id: number

@@ -1,3 +1,5 @@
+import { ComposedChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { format, parseISO } from 'date-fns'
 import TradeInfo from './trade-info'
 
 interface ChartData {

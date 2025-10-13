@@ -4,45 +4,26 @@ import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Header from '@/components/header'
 import PlanStockCard from '@/components/plan-stock-card'
-import ReviewStockCard from '@/components/review-stock-card'
+import TradeCard from '@/components/trade-card'
 
 // 실제 주식 데이터 조회 함수
+// Next.js API route를 통해 프록시로 백엔드 호출 (상대 경로 사용)
 const fetchStocks = async () => {
-  const response = await fetch('http://localhost:8000/api/stocks/')
+  const response = await fetch('/api/stocks')
   if (!response.ok) {
     throw new Error('주식 데이터 조회 실패')
   }
   return response.json()
 }
 
-const mockTradingRecords = [
-  {
-    id: 1,
-    stock_name: '삼성전자',
-    stock_symbol: '005930',
-    entry_date: '2024-01-10',
-    exit_date: '2024-01-12',
-    entry_price: 67000,
-    exit_price: 69000,
-    quantity: 100,
-    plan_summary: '기술적 반등 구간에서 단기 매매. 67,000원 진입, 69,000원 목표가',
-    result_summary: '목표가 달성하여 청산. 계획대로 진행됨',
-    profit_loss: 200000,
-    review_notes: '계획된 시나리오대로 진행. 손절가 설정이 적절했음'
-  },
-  {
-    id: 2,
-    stock_name: 'SK하이닉스',
-    stock_symbol: '000660',
-    entry_date: '2024-01-08',
-    entry_price: 128000,
-    quantity: 50,
-    plan_summary: '반도체 업황 개선 기대감으로 중장기 보유. 손절가 125,000원',
-    result_summary: '',
-    profit_loss: undefined,
-    review_notes: ''
+// 실제 매매 내역 조회 함수
+const fetchRecentTrades = async () => {
+  const response = await fetch('/api/trades/recent?days=10')
+  if (!response.ok) {
+    throw new Error('매매 내역 조회 실패')
   }
-]
+  return response.json()
+}
 
 type Mode = 'plan' | 'review'
 
@@ -50,12 +31,23 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false)
   const [mode, setMode] = useState<Mode>('plan')
 
-  // 실제 주식 데이터 조회
-  const { data: stocks = [], isLoading, error } = useQuery({
+  // 실제 주식 데이터 조회 (계획 모드용)
+  const { data: stocks = [], isLoading: isLoadingStocks, error: stocksError } = useQuery({
     queryKey: ['stocks'],
     queryFn: fetchStocks,
     refetchInterval: 60000, // 1분마다 갱신
   })
+
+  // 실제 매매 내역 조회 (복기 모드용)
+  const { data: tradesData, isLoading: isLoadingTrades, error: tradesError } = useQuery({
+    queryKey: ['recentTrades'],
+    queryFn: fetchRecentTrades,
+    refetchInterval: 300000, // 5분마다 갱신
+  })
+
+  const trades = tradesData?.data || []
+  const isLoading = mode === 'plan' ? isLoadingStocks : isLoadingTrades
+  const error = mode === 'plan' ? stocksError : tradesError
 
   useEffect(() => {
     setMounted(true)
@@ -115,22 +107,22 @@ export default function DashboardPage() {
   const createGridItems = (items: any[], mode: Mode) => {
     const minItems = 8
     const gridItems = [...items]
-    
+
     while (gridItems.length < minItems) {
       gridItems.push(null)
     }
-    
+
     return gridItems.map((item, index) => (
-      <div key={item?.id || `empty-${index}`}>
+      <div key={item?.id || item?.order_no || `empty-${index}`}>
         {mode === 'plan' ? (
-          <PlanStockCard 
-            stock={item} 
+          <PlanStockCard
+            stock={item}
             onClick={item ? () => handleStockCardClick(item.id) : undefined}
           />
         ) : (
-          <ReviewStockCard 
-            record={item} 
-            onClick={item ? () => handleStockCardClick(item.id) : undefined}
+          <TradeCard
+            trade={item}
+            onClick={item ? () => handleStockCardClick(item.order_no || index) : undefined}
           />
         )}
       </div>
@@ -165,9 +157,9 @@ export default function DashboardPage() {
 
         {/* Grid Layout */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          {mode === 'plan' 
+          {mode === 'plan'
             ? createGridItems(stocks, 'plan')
-            : createGridItems(mockTradingRecords, 'review')
+            : createGridItems(trades, 'review')
           }
         </div>
       </main>
