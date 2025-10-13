@@ -30,13 +30,14 @@ type Mode = 'plan' | 'review'
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false)
-  const [mode, setMode] = useState<Mode>('plan')
+  const [mode, setMode] = useState<Mode>('review')
 
   // 실제 주식 데이터 조회 (계획 모드용)
   const { data: stocks = [], isLoading: isLoadingStocks, error: stocksError } = useQuery({
     queryKey: ['stocks'],
     queryFn: fetchStocks,
     refetchInterval: 60000, // 1분마다 갱신
+    enabled: mode === 'plan', // 계획 모드일 때만 실행
   })
 
   // 실제 매매 내역 조회 (복기 모드용)
