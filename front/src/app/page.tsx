@@ -2,13 +2,21 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Cookies from 'js-cookie'
 
 export default function HomePage() {
   const router = useRouter()
 
   useEffect(() => {
-    // 메인 페이지에 접속하면 자동으로 대시보드로 리다이렉트
-    router.push('/dashboard')
+    // 토큰 확인 (쿠키와 로컬스토리지 모두 확인)
+    const token = Cookies.get('access_token') || localStorage.getItem('access_token')
+
+    // 로그인 여부에 따라 리다이렉트
+    if (token) {
+      router.push('/dashboard')
+    } else {
+      router.push('/login')
+    }
   }, [router])
 
   return (

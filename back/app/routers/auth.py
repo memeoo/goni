@@ -16,7 +16,7 @@ router = APIRouter()
 # 환경변수에서 가져오거나 기본값 사용
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 480  # 8 hours
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token")
 
@@ -77,16 +77,22 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
+        print(f"[AUTH] Received token: {token[:20]}...")
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        print(f"[AUTH] Decoded username: {username}")
         if username is None:
+            print("[AUTH] Username is None in token payload")
             raise credentials_exception
-    except JWTError:
+    except JWTError as e:
+        print(f"[AUTH] JWT decode error: {e}")
         raise credentials_exception
 
     user = get_user_by_username(db, username=username)
     if user is None:
+        print(f"[AUTH] User not found: {username}")
         raise credentials_exception
+    print(f"[AUTH] User authenticated: {user.username}")
     return user
 
 
@@ -156,3 +162,29 @@ async def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 @router.get("/me", response_model=schemas.User)
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.put("/update-kiwoom")
+async def update_kiwoom_settings(
+    settings: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """키움증권 API 설정 업데이트"""
+    app_key = settings.get('app_key')
+    app_secret = settings.get('app_secret')
+
+    if not app_key or not app_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="APP KEY and APP SECRET are required"
+        )
+
+    # 사용자의 키움 API 설정 업데이트
+    current_user.app_key = app_key
+    current_user.app_secret = app_secret
+
+    db.commit()
+    db.refresh(current_user)
+
+    return {"message": "Kiwoom API settings updated successfully"}

@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { TrendingUp, Plus, RefreshCw, Settings } from 'lucide-react'
+import { TrendingUp, Plus, RefreshCw, Settings, LogOut, User } from 'lucide-react'
+import { clearAuthToken } from '@/lib/api'
+import { useRouter } from 'next/navigation'
 
 interface HeaderProps {
   mode: 'plan' | 'review'
@@ -11,19 +13,25 @@ interface HeaderProps {
   onStrategyManage: () => void
 }
 
-export default function Header({ 
-  mode, 
-  onModeChange, 
-  onRefresh, 
-  onAddStock, 
-  onStrategyManage 
+export default function Header({
+  mode,
+  onModeChange,
+  onRefresh,
+  onAddStock,
+  onStrategyManage
 }: HeaderProps) {
+  const router = useRouter()
   const today = new Date().toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
     weekday: 'long'
   })
+
+  const handleLogout = () => {
+    clearAuthToken()
+    router.push('/login')
+  }
 
   return (
     <header className="bg-white shadow-sm border-b">
@@ -92,6 +100,22 @@ export default function Header({
               >
                 <Settings className="h-4 w-4" />
                 <span>전략 관리</span>
+              </button>
+
+              <button
+                onClick={() => router.push('/profile')}
+                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
+              >
+                <User className="h-4 w-4" />
+                <span>프로필</span>
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className="bg-red-100 text-red-700 px-4 py-2 rounded-lg hover:bg-red-200 transition-colors flex items-center space-x-2"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>로그아웃</span>
               </button>
             </div>
           </div>

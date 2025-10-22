@@ -1,9 +1,7 @@
 import sqlalchemy as sa
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
-
-Base = declarative_base()
+from app.database import Base
 
 
 class User(Base):
@@ -37,29 +35,56 @@ class Stock(Base):
 
 class TradingPlan(Base):
     __tablename__ = "trading_plans"
-    
+
     id = sa.Column(sa.Integer, primary_key=True, index=True)
     user_id = sa.Column(sa.Integer, sa.ForeignKey("users.id"))
     stock_id = sa.Column(sa.Integer, sa.ForeignKey("stocks.id"))
-    
+
     # 매매 계획
     plan_type = sa.Column(sa.String)  # 'buy' or 'sell'
     target_price = sa.Column(sa.Float)
     quantity = sa.Column(sa.Integer)
     reason = sa.Column(sa.Text)  # 매매 이유
-    
+
     # 실제 매매 결과
     executed_price = sa.Column(sa.Float, nullable=True)
     executed_quantity = sa.Column(sa.Integer, nullable=True)
     executed_at = sa.Column(sa.DateTime, nullable=True)
-    
+
     # 복기
     review = sa.Column(sa.Text, nullable=True)  # 복기 내용
     profit_loss = sa.Column(sa.Float, nullable=True)  # 수익/손실
-    
+
     status = sa.Column(sa.String, default="planned")  # planned, executed, reviewed
     created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
     updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     user = relationship("User", back_populates="trading_plans")
     stock = relationship("Stock", back_populates="trading_plans")
+    recap = relationship("Recap", back_populates="trading_plan", uselist=False)
+
+
+class Recap(Base):
+    __tablename__ = "recap"
+
+    id = sa.Column(sa.Integer, primary_key=True, index=True)
+    user_id = sa.Column(sa.Integer, sa.ForeignKey("users.id"), nullable=False)
+    trading_plan_id = sa.Column(sa.Integer, sa.ForeignKey("trading_plans.id"), nullable=True)  # nullable로 변경
+    order_no = sa.Column(sa.String, index=True)  # 주문번호 (한투 API)
+
+    # 매매 이유 항목들
+    catalyst = sa.Column(sa.Text, nullable=True)  # 재료
+    market_condition = sa.Column(sa.Text, nullable=True)  # 시황
+    price_chart = sa.Column(sa.Text, nullable=True)  # 가격(차트)
+    volume = sa.Column(sa.Text, nullable=True)  # 거래량
+    supply_demand = sa.Column(sa.Text, nullable=True)  # 수급(외국인/기관)
+    emotion = sa.Column(sa.Text, nullable=True)  # 심리(매매 당시의 감정)
+    evaluation = sa.Column(sa.String, nullable=True)  # 평가 (good, so-so, bad)
+    evaluation_reason = sa.Column(sa.Text, nullable=True)  # 평가 이유
+    etc = sa.Column(sa.Text, nullable=True)  # 기타(자유 기술)
+
+    created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
+    updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User")
+    trading_plan = relationship("TradingPlan", back_populates="recap")

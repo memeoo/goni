@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { tradingPlansAPI } from '@/lib/api'
 import Header from '@/components/header'
 import PlanStockCard from '@/components/plan-stock-card'
 import TradeCard from '@/components/trade-card'
+import RecapModal from '@/components/recap-modal'
 
 // 실제 주식 데이터 조회 함수
 // Next.js API route를 통해 프록시로 백엔드 호출 (상대 경로 사용)
@@ -19,11 +21,8 @@ const fetchStocks = async () => {
 
 // 실제 매매 내역 조회 함수
 const fetchRecentTrades = async () => {
-  const response = await fetch('/api/trades/recent?days=10')
-  if (!response.ok) {
-    throw new Error('매매 내역 조회 실패')
-  }
-  return response.json()
+  const response = await tradingPlansAPI.getRecentTrades(10)
+  return response.data
 }
 
 type Mode = 'plan' | 'review'
@@ -31,6 +30,10 @@ type Mode = 'plan' | 'review'
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false)
   const [mode, setMode] = useState<Mode>('review')
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedTradingPlanId, setSelectedTradingPlanId] = useState<number | null>(null)
+  const [selectedOrderNo, setSelectedOrderNo] = useState<string | undefined>(undefined)
+  const [selectedStockName, setSelectedStockName] = useState<string | undefined>(undefined)
 
   // 실제 주식 데이터 조회 (계획 모드용)
   const { data: stocks = [], isLoading: isLoadingStocks, error: stocksError } = useQuery({
@@ -100,9 +103,18 @@ export default function DashboardPage() {
     console.log('전략 관리')
   }
 
-  const handleStockCardClick = (id: number) => {
-    // TODO: Implement card click functionality
-    console.log(`카드 클릭: ${id}`)
+  const handleStockCardClick = (id: number, trade?: any) => {
+    if (mode === 'review' && trade) {
+      // 복기 모드에서는 모달 열기
+      // trade 데이터에는 order_no만 있고 trading_plan_id가 없음
+      setSelectedTradingPlanId(null)
+      setSelectedOrderNo(trade.order_no)
+      setSelectedStockName(trade.stock_name || trade.name)
+      setIsModalOpen(true)
+    } else {
+      // 계획 모드에서는 아직 미구현
+      console.log(`카드 클릭: ${id}`)
+    }
   }
 
   // Create empty slots to fill grid to at least 8 items (2 rows × 4 columns)
@@ -124,7 +136,7 @@ export default function DashboardPage() {
         ) : (
           <TradeCard
             trade={item}
-            onClick={item ? () => handleStockCardClick(item.order_no || index) : undefined}
+            onClick={item ? () => handleStockCardClick(item.order_no || index, item) : undefined}
           />
         )}
       </div>
@@ -174,6 +186,15 @@ export default function DashboardPage() {
           </div>
         </div>
       </footer>
+
+      {/* Recap Modal */}
+      <RecapModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        tradingPlanId={selectedTradingPlanId}
+        orderNo={selectedOrderNo}
+        stockName={selectedStockName}
+      />
     </div>
   )
 }

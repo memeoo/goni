@@ -1,4 +1,4 @@
-import { Clock, TrendingUp, TrendingDown, FileText } from 'lucide-react'
+import { Clock, TrendingUp, TrendingDown, FileText, CheckCircle } from 'lucide-react'
 
 interface TradeData {
   stock_code: string
@@ -8,6 +8,7 @@ interface TradeData {
   quantity: number
   datetime: string  // YYYYMMDDHHmmss
   order_no?: string
+  has_recap?: boolean
 }
 
 interface TradeCardProps {
@@ -48,14 +49,23 @@ export default function TradeCard({ trade, onClick }: TradeCardProps) {
 
   return (
     <div
-      className="bg-white border border-gray-200 rounded-lg p-4 min-h-[280px] hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between"
+      className={`bg-white border-2 rounded-lg p-4 min-h-[280px] hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between ${
+        trade.has_recap
+          ? 'border-green-400 bg-green-50'
+          : 'border-gray-200'
+      }`}
       onClick={onClick}
     >
       <div>
         {/* Header */}
         <div className="flex justify-between items-start mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">{trade.stock_name}</h3>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-gray-900">{trade.stock_name}</h3>
+              {trade.has_recap && (
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              )}
+            </div>
             <p className="text-sm text-gray-500">{trade.stock_code}</p>
           </div>
           <div className={`px-3 py-1 rounded-full text-sm font-medium ${
@@ -105,14 +115,24 @@ export default function TradeCard({ trade, onClick }: TradeCardProps) {
         </div>
       </div>
 
-      {/* Order Number (Optional) */}
-      {trade.order_no && (
-        <div className="mt-3 pt-3 border-t border-gray-100">
-          <p className="text-xs text-gray-400">
+      {/* Order Number & Recap Status */}
+      <div className="mt-3 pt-3 border-t border-gray-100">
+        {trade.order_no && (
+          <p className="text-xs text-gray-400 mb-1">
             주문번호: {trade.order_no}
           </p>
-        </div>
-      )}
+        )}
+        {trade.has_recap ? (
+          <div className="flex items-center gap-1 text-xs text-green-600 font-medium">
+            <CheckCircle className="h-3 w-3" />
+            <span>복기 완료</span>
+          </div>
+        ) : (
+          <p className="text-xs text-orange-500 font-medium">
+            복기 미작성
+          </p>
+        )}
+      </div>
     </div>
   )
 }

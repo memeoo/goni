@@ -95,3 +95,36 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     username: Optional[str] = None
+
+
+class RecapBase(BaseModel):
+    catalyst: Optional[str] = None
+    market_condition: Optional[str] = None
+    price_chart: Optional[str] = None
+    volume: Optional[str] = None
+    supply_demand: Optional[str] = None
+    emotion: Optional[str] = None
+    evaluation: Optional[str] = None
+    evaluation_reason: Optional[str] = None
+    etc: Optional[str] = None
+
+
+class RecapCreate(RecapBase):
+    trading_plan_id: Optional[int] = None
+    order_no: Optional[str] = None
+
+
+class RecapUpdate(RecapBase):
+    pass
+
+
+class Recap(RecapBase):
+    id: int
+    user_id: int
+    trading_plan_id: Optional[int] = None
+    order_no: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

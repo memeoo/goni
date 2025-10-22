@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 import sys
 import os
 
-from app.database import get_database
-from app import schemas
+from app.database import get_database, get_db
+from app import schemas, models
 from app.routers.auth import get_current_user
 
 # analyze 모듈 경로 추가
@@ -71,7 +72,11 @@ async def delete_trading_plan(
 
 
 @router.get("/trades/recent")
-async def get_recent_trades(days: int = 10) -> Dict[str, Any]:
+async def get_recent_trades(
+    days: int = 10,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+) -> Dict[str, Any]:
     """
     최근 N일간의 실제 매매 내역 조회 (키움증권 API)
 
@@ -82,21 +87,28 @@ async def get_recent_trades(days: int = 10) -> Dict[str, Any]:
         Dict: 매매 내역 리스트
     """
     try:
-        # .env 파일 경로 설정
+        # 사용자의 키움 API 설정 확인
+        if not current_user.app_key or not current_user.app_secret:
+            raise HTTPException(
+                status_code=400,
+                detail="키움증권 API 정보가 설정되지 않았습니다. 프로필 페이지에서 설정해주세요."
+            )
+
+        kiwoom_app_key = current_user.app_key
+        kiwoom_secret_key = current_user.app_secret
+
+        # .env 파일에서 계좌번호와 Mock 설정만 로드
         from dotenv import load_dotenv
         analyze_env_path = os.path.join(os.path.dirname(__file__), '../../../analyze/.env')
         load_dotenv(analyze_env_path)
 
-        # 환경변수에서 키움 API 설정 로드
-        kiwoom_app_key = os.getenv('KIWOOM_APP_KEY')
-        kiwoom_secret_key = os.getenv('KIWOOM_SECRET_KEY')
         kiwoom_account_no = os.getenv('KIWOOM_ACCOUNT_NO')
         kiwoom_use_mock = os.getenv('KIWOOM_USE_MOCK', 'false').lower() == 'true'
 
-        if not all([kiwoom_app_key, kiwoom_secret_key, kiwoom_account_no]):
+        if not kiwoom_account_no:
             raise HTTPException(
                 status_code=500,
-                detail="키움증권 API 설정이 없습니다. .env 파일을 확인해주세요."
+                detail="계좌번호가 설정되지 않았습니다."
             )
 
         try:
@@ -125,9 +137,20 @@ async def get_recent_trades(days: int = 10) -> Dict[str, Any]:
 
             print(f"✅ 매매내역 조회 완료: {len(trades)}건")
 
-            # 응답 데이터 포맷팅
+            # 응답 데이터 포맷팅 (복기 여부 추가)
             formatted_trades = []
             for trade in trades:
+                order_no = trade.get('order_no', '')
+
+                # 복기 존재 여부 확인
+                has_recap = False
+                if order_no:
+                    recap = db.query(models.Recap).filter(
+                        models.Recap.order_no == order_no,
+                        models.Recap.user_id == current_user.id
+                    ).first()
+                    has_recap = recap is not None
+
                 formatted_trades.append({
                     'stock_code': trade['stock_code'],
                     'stock_name': trade['stock_name'],
@@ -135,7 +158,8 @@ async def get_recent_trades(days: int = 10) -> Dict[str, Any]:
                     'price': float(trade['price']),
                     'quantity': int(trade['quantity']),
                     'datetime': trade['datetime'],  # YYYYMMDDHHmmss
-                    'order_no': trade.get('order_no', '')
+                    'order_no': order_no,
+                    'has_recap': has_recap
                 })
 
             return {

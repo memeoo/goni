@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 
 from app.database import database
-from app.routers import auth, stocks, trading_plans
+from app.routers import auth, stocks, trading_plans, recap
 
 
 @asynccontextmanager
@@ -27,10 +27,12 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000", 
-        "http://localhost:3001", 
-        "http://localhost:3002", 
-        "http://localhost:3003"
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+        "http://3.34.102.218:3000",
+        "http://3.34.102.218:3001"
     ],  # Next.js 개발 서버 (여러 포트 허용)
     allow_credentials=True,
     allow_methods=["*"],
@@ -41,6 +43,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 app.include_router(stocks.router, prefix="/api/stocks", tags=["stocks"])
 app.include_router(trading_plans.router, prefix="/api/trading-plans", tags=["trading-plans"])
+app.include_router(recap.router)
 
 
 @app.get("/")
