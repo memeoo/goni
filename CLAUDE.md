@@ -8,6 +8,7 @@
 - front-end : next.js v.15 이상
 - analyze: python v.3.13 
 - DB : postgresql (db name:goni, port:5432, user:goniadmin, password:shsbsy70)
+- 프로세스 관리: pm2. name: goni-backend(bak-end), goni-front(front-end)
 
 # Project description
 - 이름:  Goni(영화 타짜의 주인공 ‘고니’ 처럼 타짜 급의 탑 트레이더가 되기 위한 매매 계획 및 복기 일지 프로그램)
@@ -15,3 +16,7 @@
 
 # Not To do.
 - 절대 Mock 데이터를 만들어서 표시하지 말 것. 데이터가 없거나 가져올 수 없으면 그냥 없다고 표시할 것. Dummy 데이터나 Mock 데이터를 절대로 만들어서 표시하지 말 것. 
+
+# README.md Update.
+- 새로운 기능이 추가되거나 변경이 일어나면 항상 README.md 파일의 ## ADDED or MODIFIED 아래에 내용을 적어서 계속 업데이트 상태를 유지하시오.
+- 프로젝트를 처음 시작할 때, 항상 README.md 파일을 먼저 읽어서 project의 진행 상황을 파악하시오.
