@@ -191,6 +191,63 @@ class KiwoomAPI:
 
         return self._make_request(endpoint, api_id, data)
 
+    def get_daily_chart(
+        self,
+        stock_code: str,
+        base_dt: str = '',
+        upd_stkpc_tp: str = '1'
+    ) -> Optional[Dict[str, Any]]:
+        """
+        주식 일봉 차트 데이터를 조회합니다 (ka10081 API).
+
+        Args:
+            stock_code: 종목코드 (6자리, 예: '005930')
+            base_dt: 기준일자 YYYYMMDD (공백입력시 금일데이터)
+            upd_stkpc_tp: 수정주가구분 ('0': 미수정, '1': 수정, 기본값: '1')
+
+        Returns:
+            dict: 일봉 차트 데이터
+            {
+                'stk_cd': '005930',
+                'stk_dt_pole_chart_qry': [
+                    {
+                        'dt': '20250908',       # 날짜
+                        'open_pric': '69800',   # 시가
+                        'high_pric': '70500',   # 고가
+                        'low_pric': '69600',    # 저가
+                        'cur_prc': '70100',     # 종가
+                        'trde_qty': '9263135',  # 거래량
+                        'trde_prica': '648525'  # 거래대금
+                    },
+                    ...
+                ],
+                'return_code': 0,
+                'return_msg': '정상적으로 처리되었습니다'
+            }
+        """
+        endpoint = '/api/dostk/chart'
+        api_id = 'ka10081'
+
+        data = {
+            'stk_cd': stock_code,
+            'base_dt': base_dt,
+            'upd_stkpc_tp': upd_stkpc_tp,
+        }
+
+        result = self._make_request(endpoint, api_id, data)
+
+        if not result:
+            logger.error(f"일봉 차트 조회 실패: {stock_code}")
+            return None
+
+        # 응답 검증
+        if result.get('return_code') != 0:
+            logger.error(f"일봉 차트 조회 오류: {result.get('return_msg', 'Unknown error')}")
+            return None
+
+        logger.info(f"일봉 차트 조회 성공: {stock_code} ({len(result.get('stk_dt_pole_chart_qry', []))}개 데이터)")
+        return result
+
     def get_recent_trades(self, days: int = 5) -> List[Dict[str, Any]]:
         """
         최근 N일간의 매매(매수/매도) 데이터를 가져옵니다.
@@ -348,3 +405,21 @@ if __name__ == '__main__':
             print(f"... 외 {len(trades) - 10}건")
     else:
         print("조회된 매매내역이 없습니다")
+
+    # 일봉 차트 조회 테스트 (ka10081)
+    print("\n" + "=" * 50)
+    print("일봉 차트 조회 테스트 (ka10081)")
+    print("=" * 50)
+    chart = api.get_daily_chart(stock_code='005930')
+    if chart:
+        print(f"✓ 조회 성공")
+        chart_data = chart.get('stk_dt_pole_chart_qry', [])
+        print(f"  종목코드: {chart.get('stk_cd')}")
+        print(f"  데이터 건수: {len(chart_data)}")
+        for i, data in enumerate(chart_data[:5], 1):  # 최근 5개만 출력
+            print(f"{i}. [{data['dt']}] 시가:{data['open_pric']} 고가:{data['high_pric']} "
+                  f"저가:{data['low_pric']} 종가:{data['cur_prc']} 거래량:{data['trde_qty']}")
+        if len(chart_data) > 5:
+            print(f"... 외 {len(chart_data) - 5}건")
+    else:
+        print("✗ 일봉 차트 조회 실패")

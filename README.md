@@ -106,6 +106,119 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-10-25: 복기 모달에 일봉 차트 시각화 추가
+
+#### 1. DailyChart 컴포넌트 개발 (front/src/components/daily-chart.tsx)
+- **파일**: `front/src/components/daily-chart.tsx` (신규)
+- **기능**:
+  - Canvas API를 사용한 고성능 차트 렌더링
+  - 최근 50일 일봉 캔들스틱 차트 표시
+    - 양봉: 빨간색 (#ff4444), 음봉: 파란색 (#4444ff)
+    - 심지(High-Low)와 몸통(Open-Close) 렌더링
+  - 거래량 바 차트 (일봉 차트 아래)
+    - 양봉 색상은 빨강, 음봉 색상은 파랑
+  - 가격 축 (오른쪽):
+    - 최저가에서 10% 낮은 값부터 최고가에서 10% 높은 값까지
+    - 5등분하여 표시 (최소값, 최대값 포함)
+  - 거래량 축 (오른쪽):
+    - 0부터 최대 거래량까지 5등분
+    - 1000단위는 'K', 백만 단위는 'M'으로 표시
+  - X축 (날짜):
+    - 5일 단위로 표시 (월/일 형식, 년도 제외)
+  - 높이 비율: 가격 차트 330px : 거래량 차트 100px (약 3.3:1)
+
+#### 2. RecapModal 컴포넌트 개선 (front/src/components/recap-modal.tsx)
+- **파일**: `front/src/components/recap-modal.tsx`
+- **변경 사항**:
+  - DailyChart 컴포넌트 임포트 및 통합
+  - stockCode prop 추가
+  - 일봉 차트 데이터 조회 useQuery 추가:
+    - 엔드포인트: `/api/stocks/{stock_code}/daily-chart`
+    - 주식 선택 시 자동으로 50일간의 일봉 데이터 로딩
+  - 모달 내 차트 배치:
+    - 모달 상단에 일봉 차트 표시
+    - 입력 필드는 차트 아래에 배치
+  - 차트 로딩 상태 표시
+
+#### 3. Dashboard 페이지 수정 (front/src/app/dashboard/page.tsx)
+- **파일**: `front/src/app/dashboard/page.tsx`
+- **변경 사항**:
+  - selectedStockCode 상태 추가
+  - handleStockCardClick에서 stockCode 저장
+  - RecapModal에 stockCode prop 전달
+
+#### 4. API 스키마 추가 (back/app/schemas.py)
+- **파일**: `back/app/schemas.py`
+- **추가 스키마**:
+  - ChartDataPoint: 일봉 차트 데이터 포인트
+  - DailyChartResponse: 일봉 차트 조회 응답
+
+### 2025-10-25: 키움증권 API ka10081을 이용한 일봉 차트 조회 기능 추가
+
+#### 1. KiwoomAPI 클래스 확장 (analyze/lib/kiwoom.py)
+- **파일**: `analyze/lib/kiwoom.py`
+- **추가된 메서드**: `get_daily_chart()`
+  - 키움증권 Open REST API ka10081 TR 사용
+  - 주식 일봉 차트 데이터 조회 (OHLC, 거래량, 거래대금)
+  - 파라미터:
+    - `stock_code` (str): 종목코드 (6자리, 예: '005930')
+    - `base_dt` (str): 기준일자 YYYYMMDD (공백: 금일데이터)
+    - `upd_stkpc_tp` (str): 수정주가구분 ('0': 미수정, '1': 수정, 기본값: '1')
+  - 반환 데이터: 일봉 차트 데이터 리스트
+
+#### 2. 백엔드 API 엔드포인트 추가 (back/app/routers/stocks.py)
+- **파일**: `back/app/routers/stocks.py`
+- **새로운 엔드포인트**: `GET /api/stocks/{stock_code}/daily-chart`
+  - 쿼리 파라미터:
+    - `stock_code`: 종목코드 (필수)
+    - `base_dt`: 기준일자 (선택, 기본값: 금일)
+    - `upd_stkpc_tp`: 수정주가구분 (선택, 기본값: '1')
+  - 응답 포맷:
+    ```json
+    {
+      "stock_code": "005930",
+      "data": [
+        {
+          "date": "2025-09-08",
+          "open": 69800,
+          "high": 70500,
+          "low": 69600,
+          "close": 70100,
+          "volume": 9263135,
+          "trade_amount": 648525
+        },
+        ...
+      ],
+      "total_records": 100
+    }
+    ```
+  - 기능:
+    - 환경변수에서 키움증권 API 자격증명 자동 로드
+    - 키움증권 API 호출 및 에러 처리
+    - 응답 데이터 포맷 변환 (YYYYMMDD -> YYYY-MM-DD, 문자열 -> 숫자)
+    - 상세 로깅 및 디버깅 정보 제공
+
+#### 3. 환경변수 설정 필요
+- `KIWOOM_APP_KEY`: 키움증권 앱 키
+- `KIWOOM_SECRET_KEY`: 키움증권 시크릿 키
+- `KIWOOM_ACCOUNT_NO`: 키움증권 계좌번호
+- `KIWOOM_USE_MOCK`: 모의투자 여부 (True/False, 기본값: False)
+
+### 2025-10-25: 복기 모달 UI 레이아웃 개선
+
+#### 복기 상세 팝업 (recap-modal.tsx)
+- **파일**: `front/src/components/recap-modal.tsx`
+- **변경 사항**:
+  - 모달 폭을 전체 화면의 80%로 확장 (`w-[80%]`)
+  - 마진 및 불필요한 제약 제거로 최적 레이아웃 구현
+  - 입력 필드를 2열 그리드로 재배치하여 한 행에 2개씩 배치:
+    - Row 1: 재료 & 시황
+    - Row 2: 가격(차트) & 거래량
+    - Row 3: 수급(외국인/기관) & 심리(매매 당시의 감정)
+    - Row 4: 평가 (라디오 버튼, 전체 폭)
+    - Row 5: 평가이유 & 기타(자유 기술)
+  - 더 나은 공간 활용과 시각적 일관성 제공
+
 ### 2025-10-22: 프로젝트 초기 구축 완료
 
 #### 1. 백엔드 (FastAPI) - 완전 구현

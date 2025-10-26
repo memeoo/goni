@@ -320,6 +320,287 @@ async def get_stock_current_price(
 # Mock 현재가 함수도 제거 - 실제 KIS API만 사용
 
 
+@router.get("/{stock_code}/daily-chart", response_model=schemas.DailyChartResponse)
+async def get_stock_daily_chart(
+    stock_code: str,
+    base_dt: str = '',
+    upd_stkpc_tp: str = '1'
+) -> Dict[str, Any]:
+    """
+    키움증권 API (ka10081)를 통한 주식 일봉 차트 데이터 조회
+
+    Args:
+        stock_code (str): 종목코드 (6자리, 예: '005930')
+        base_dt (str): 기준일자 YYYYMMDD (공백입력시 금일데이터)
+        upd_stkpc_tp (str): 수정주가구분 ('0': 미수정, '1': 수정, 기본값: '1')
+
+    Returns:
+        Dict: 일봉 차트 데이터
+        {
+            'stock_code': '005930',
+            'data': [
+                {
+                    'date': '2025-09-08',
+                    'open': 69800,
+                    'high': 70500,
+                    'low': 69600,
+                    'close': 70100,
+                    'volume': 9263135,
+                    'trade_amount': 648525
+                },
+                ...
+            ],
+            'total_records': 100
+        }
+    """
+    try:
+        # .env 파일 경로 설정
+        import os
+        from datetime import datetime
+        from dotenv import load_dotenv
+        analyze_env_path = os.path.join(os.path.dirname(__file__), '../../../analyze/.env')
+        load_dotenv(analyze_env_path)
+
+        # base_dt가 비어있으면 오늘 날짜로 설정
+        if not base_dt or base_dt.strip() == '':
+            base_dt = datetime.now().strftime('%Y%m%d')
+            print(f"base_dt가 비어있어 오늘 날짜로 설정: {base_dt}")
+
+        # 환경변수 로드
+        app_key = os.getenv('KIWOOM_APP_KEY')
+        secret_key = os.getenv('KIWOOM_SECRET_KEY')
+        account_no = os.getenv('KIWOOM_ACCOUNT_NO')
+        use_mock = os.getenv('KIWOOM_USE_MOCK', 'False').lower() == 'true'
+
+        if not all([app_key, secret_key, account_no]):
+            raise HTTPException(
+                status_code=500,
+                detail="키움증권 API 설정이 완료되지 않았습니다 (.env 파일에서 KIWOOM_APP_KEY, KIWOOM_SECRET_KEY, KIWOOM_ACCOUNT_NO 확인)"
+            )
+
+        # KiwoomAPI 인스턴스 생성
+        from lib.kiwoom import KiwoomAPI
+        api = KiwoomAPI(
+            app_key=app_key,
+            secret_key=secret_key,
+            account_no=account_no,
+            use_mock=use_mock
+        )
+
+        # 일봉 차트 조회
+        print(f"🔍 키움증권 일봉 차트 조회 시작: {stock_code}, base_dt={base_dt}")
+        chart_result = api.get_daily_chart(
+            stock_code=stock_code,
+            base_dt=base_dt,
+            upd_stkpc_tp=upd_stkpc_tp
+        )
+
+        if not chart_result:
+            print(f"❌ 키움증권 일봉 차트 조회 실패: {stock_code}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"종목 {stock_code}의 일봉 차트 데이터를 조회할 수 없습니다"
+            )
+
+        # 응답 데이터 변환
+        chart_data_list = chart_result.get('stk_dt_pole_chart_qry', [])
+
+        # 데이터 포맷 변환 (문자열 -> 숫자)
+        transformed_data = []
+        close_prices = []  # 종가 수집 (이동평균선 계산용)
+
+        for i, chart_data in enumerate(chart_data_list):
+            try:
+                current_close = float(chart_data.get('cur_prc', 0))
+                close_prices.append(current_close)
+
+                # 이전 봉(더 이전 날짜)의 종가 가져오기 (변화율 계산용)
+                # API 응답에서 가장 최신(index 0)부터 과거 순서이므로,
+                # index+1이 이전 날짜 데이터
+                prev_close = None
+                if i + 1 < len(chart_data_list):
+                    try:
+                        prev_chart_data = chart_data_list[i + 1]
+                        prev_close = float(prev_chart_data.get('cur_prc', 0))
+                    except (ValueError, KeyError):
+                        prev_close = None
+
+                # 변화율 계산 (전일대비)
+                change_rate = None
+                if prev_close and prev_close != 0:
+                    change_rate = ((current_close - prev_close) / prev_close) * 100
+
+                transformed_item = {
+                    'date': chart_data['dt'][:4] + '-' + chart_data['dt'][4:6] + '-' + chart_data['dt'][6:8],  # YYYYMMDD -> YYYY-MM-DD
+                    'open': float(chart_data.get('open_pric', 0)),
+                    'high': float(chart_data.get('high_pric', 0)),
+                    'low': float(chart_data.get('low_pric', 0)),
+                    'close': current_close,
+                    'volume': int(chart_data.get('trde_qty', 0)),
+                    'trade_amount': int(chart_data.get('trde_prica', 0)),
+                    'change_rate': change_rate,
+                    'ma5': None,
+                    'ma10': None,
+                    'ma20': None,
+                    'ma60': None,
+                }
+                transformed_data.append(transformed_item)
+
+            except (ValueError, KeyError) as e:
+                print(f"⚠️ 데이터 변환 오류: {e}, 데이터: {chart_data}")
+                continue
+
+        # 이동평균선 계산
+        # 데이터는 최신순(index 0 = 가장 최신)이므로, 역순으로 처리해야 함
+        for i in range(len(transformed_data)):
+            # 현재 인덱스 기준으로 과거 데이터 가져오기
+            # i부터 과거 방향(i+1, i+2, ...)으로 N일치 데이터 수집
+
+            # 5일 이동평균선
+            if i + 4 < len(close_prices):
+                ma5 = sum(close_prices[i:i+5]) / 5
+                transformed_data[i]['ma5'] = ma5
+
+            # 10일 이동평균선
+            if i + 9 < len(close_prices):
+                ma10 = sum(close_prices[i:i+10]) / 10
+                transformed_data[i]['ma10'] = ma10
+
+            # 20일 이동평균선
+            if i + 19 < len(close_prices):
+                ma20 = sum(close_prices[i:i+20]) / 20
+                transformed_data[i]['ma20'] = ma20
+
+            # 60일 이동평균선
+            if i + 59 < len(close_prices):
+                ma60 = sum(close_prices[i:i+60]) / 60
+                transformed_data[i]['ma60'] = ma60
+
+        print(f"✅ 키움증권 일봉 차트 조회 성공: {stock_code}, {len(transformed_data)}개 데이터")
+
+        return {
+            'stock_code': stock_code,
+            'data': transformed_data,
+            'total_records': len(transformed_data)
+        }
+
+    except ImportError as e:
+        print(f"❌ 키움증권 API 모듈 import 오류: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"키움증권 API 모듈을 불러올 수 없습니다: {str(e)}"
+        )
+    except HTTPException:
+        raise  # HTTPException은 그대로 전달
+    except Exception as e:
+        print(f"❌ 일봉 차트 조회 중 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"일봉 차트 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+
+@router.get("/{stock_code}/trades")
+async def get_stock_trades(
+    stock_code: str
+) -> Dict[str, Any]:
+    """
+    특정 종목의 사용자 매매 기록 조회
+
+    Args:
+        stock_code (str): 종목코드 (6자리, 예: '005930')
+
+    Returns:
+        Dict: 매매 기록 리스트
+        {
+            'stock_code': '005930',
+            'trades': [
+                {
+                    'date': '2025-10-24',
+                    'price': 50000,
+                    'quantity': 10,
+                    'trade_type': '매수',  # '매수' 또는 '매도'
+                    'order_no': '0554357'
+                },
+                ...
+            ]
+        }
+    """
+    try:
+        # .env 파일 경로 설정
+        import os
+        from dotenv import load_dotenv
+        analyze_env_path = os.path.join(os.path.dirname(__file__), '../../../analyze/.env')
+        load_dotenv(analyze_env_path)
+
+        # KiwoomAPI를 통해 최근 거래 기록 조회
+        from lib.kiwoom import KiwoomAPI
+
+        app_key = os.getenv('KIWOOM_APP_KEY')
+        secret_key = os.getenv('KIWOOM_SECRET_KEY')
+        account_no = os.getenv('KIWOOM_ACCOUNT_NO')
+
+        if not all([app_key, secret_key, account_no]):
+            raise HTTPException(
+                status_code=500,
+                detail="키움증권 API 설정이 완료되지 않았습니다"
+            )
+
+        api = KiwoomAPI(
+            app_key=app_key,
+            secret_key=secret_key,
+            account_no=account_no,
+            use_mock=False
+        )
+
+        # 최근 거래 기록 조회 (최대 60일)
+        all_trades = api.get_recent_trades(days=60)
+
+        # 해당 종목의 거래만 필터링
+        filtered_trades = [
+            {
+                'date': trade['datetime'][:8],  # YYYYMMDD -> YYYYMMDD
+                'price': trade['price'],
+                'quantity': trade['quantity'],
+                'trade_type': trade['trade_type'],
+                'order_no': trade['order_no'],
+                'datetime': trade['datetime'],
+            }
+            for trade in all_trades
+            if trade['stock_code'] == stock_code
+        ]
+
+        # 날짜순으로 정렬 (최신순)
+        filtered_trades.sort(key=lambda x: x['datetime'], reverse=True)
+
+        print(f"✅ 종목 {stock_code}의 매매 기록 조회 완료: {len(filtered_trades)}건")
+
+        return {
+            'stock_code': stock_code,
+            'trades': filtered_trades,
+            'total_records': len(filtered_trades)
+        }
+
+    except ImportError as e:
+        print(f"❌ 키움증권 API 모듈 import 오류: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"키움증권 API 모듈을 불러올 수 없습니다: {str(e)}"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ 매매 기록 조회 중 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"매매 기록 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+
 @router.get("/{stock_code}/foreign-institutional")
 async def get_stock_foreign_institutional_data(
     stock_code: str

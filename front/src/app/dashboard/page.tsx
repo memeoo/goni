@@ -34,6 +34,7 @@ export default function DashboardPage() {
   const [selectedTradingPlanId, setSelectedTradingPlanId] = useState<number | null>(null)
   const [selectedOrderNo, setSelectedOrderNo] = useState<string | undefined>(undefined)
   const [selectedStockName, setSelectedStockName] = useState<string | undefined>(undefined)
+  const [selectedStockCode, setSelectedStockCode] = useState<string | undefined>(undefined)
 
   // 실제 주식 데이터 조회 (계획 모드용)
   const { data: stocks = [], isLoading: isLoadingStocks, error: stocksError } = useQuery({
@@ -110,6 +111,7 @@ export default function DashboardPage() {
       setSelectedTradingPlanId(null)
       setSelectedOrderNo(trade.order_no)
       setSelectedStockName(trade.stock_name || trade.name)
+      setSelectedStockCode(trade.stock_code)
       setIsModalOpen(true)
     } else {
       // 계획 모드에서는 아직 미구현
@@ -194,6 +196,7 @@ export default function DashboardPage() {
         tradingPlanId={selectedTradingPlanId}
         orderNo={selectedOrderNo}
         stockName={selectedStockName}
+        stockCode={selectedStockCode}
       />
     </div>
   )

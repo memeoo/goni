@@ -128,3 +128,26 @@ class Recap(RecapBase):
 
     class Config:
         from_attributes = True
+
+
+class ChartDataPoint(BaseModel):
+    """일봉 차트 데이터 포인트"""
+    date: str  # YYYY-MM-DD
+    open: float  # 시가
+    high: float  # 고가
+    low: float   # 저가
+    close: float  # 종가
+    volume: int  # 거래량
+    trade_amount: int  # 거래대금
+    change_rate: Optional[float] = None  # 변화율 (전일대비 %)
+    ma5: Optional[float] = None  # 5일 이동평균선
+    ma10: Optional[float] = None  # 10일 이동평균선
+    ma20: Optional[float] = None  # 20일 이동평균선
+    ma60: Optional[float] = None  # 60일 이동평균선
+
+
+class DailyChartResponse(BaseModel):
+    """일봉 차트 조회 응답"""
+    stock_code: str
+    data: list[ChartDataPoint]
+    total_records: int
