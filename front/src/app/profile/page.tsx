@@ -132,9 +132,12 @@ export default function ProfilePage() {
           <div>
             <h2 className="text-lg font-semibold text-gray-900 mb-2">키움증권 API 설정</h2>
             <p className="text-sm text-gray-600 mb-4">
-              복기 모드에서 매매 내역을 조회하려면 키움증권 API 정보를 입력해주세요.
+              복기 모드에서 매매 내역을 조회하려면 키움증권 API 신청 및 설정이 필요합니다.<br></br>
+              아래의 사이트에서 키움증권 API 신청을 하신 후,<br></br>
+              <a href='https://openapi.kiwoom.com/mgmt/VOpenApiRegView'><span style={{ color: 'blue', fontStyle:'italic'}}>https://openapi.kiwoom.com/mgmt/VOpenApiRegView</span></a><br></br>
+              [계좌 APP Key 관리] Tab에서, IP 주소등록에 3.34.102.218 를 입력하고<br></br> 
+              얻은 APP KEY와 APP SECRET 정보를 아래에 입력해 주세요.
             </p>
-
             <div className="space-y-4">
               {/* APP KEY */}
               <div>

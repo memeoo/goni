@@ -89,10 +89,13 @@ async def get_recent_trades(
     try:
         # 사용자의 키움 API 설정 확인
         if not current_user.app_key or not current_user.app_secret:
-            raise HTTPException(
-                status_code=400,
-                detail="키움증권 API 정보가 설정되지 않았습니다. 프로필 페이지에서 설정해주세요."
-            )
+            return {
+                "days": days,
+                "data": [],
+                "total_records": 0,
+                "message": "키움증권 API 정보가 설정되지 않았습니다. 프로필 페이지에서 설정해주세요.",
+                "requires_setup": True
+            }
 
         kiwoom_app_key = current_user.app_key
         kiwoom_secret_key = current_user.app_secret
@@ -180,13 +183,22 @@ async def get_recent_trades(
             print(f"❌ 키움증권 API 오류: {api_error}")
             import traceback
             traceback.print_exc()
-            raise HTTPException(
-                status_code=500,
-                detail=f"매매내역 조회 중 오류가 발생했습니다: {str(api_error)}"
-            )
+            return {
+                "days": days,
+                "data": [],
+                "total_records": 0,
+                "message": f"매매내역 조회 중 오류가 발생했습니다: {str(api_error)}",
+                "error": True
+            }
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"매매내역 조회 중 오류가 발생했습니다: {str(e)}"
-        )
+        print(f"❌ 예상치 못한 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "days": days,
+            "data": [],
+            "total_records": 0,
+            "message": f"매매내역 조회 중 예상치 못한 오류가 발생했습니다: {str(e)}",
+            "error": True
+        }
