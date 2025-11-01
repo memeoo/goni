@@ -10,7 +10,6 @@ const nextConfig = {
     ]
   },
   outputFileTracingRoot: '/home/ubuntu/goni/front',
-  allowedDevOrigins: ['http://3.34.102.218:3001'],
 }
 
 module.exports = nextConfig

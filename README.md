@@ -106,6 +106,281 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-01: 복기 대시보드 데이터 소스 변경 (키움 API → Trading DB)
+
+#### 1. 매매 내역 조회 API 변경 (back/app/routers/trading_plans.py)
+- **파일**: `back/app/routers/trading_plans.py`
+- **엔드포인트**: `GET /api/trading-plans/trades/recent`
+- **변경 사항**:
+  - **이전**: 키움증권 API에서 실시간으로 매매 기록 조회
+  - **현재**: Trading 테이블(DB)에서 최근 매매 기록 조회
+  - **장점**:
+    - 더 빠른 응답 속도 (API 호출 제거)
+    - 안정적인 데이터 제공 (키움 API 오류 영향 없음)
+    - 사용자별 동기화된 데이터만 표시
+
+- **매개변수**: `limit` (기본값: 20건)
+- **동작**:
+  1. 현재 사용자의 Trading 테이블에서 최신순으로 조회
+  2. 최신순 20개 기록 반환
+  3. 각 기록별 복기 완료 여부 확인
+  4. 프론트 호환성을 위해 데이터 포맷 변환:
+     - trade_type: 'buy' → '매수', 'sell' → '매도'
+     - executed_at (datetime) → datetime (YYYYMMDDHHmmss)
+
+- **응답 포맷** (기존 형식 유지):
+  ```json
+  {
+    "limit": 20,
+    "data": [
+      {
+        "stock_code": "005930",
+        "stock_name": "삼성전자",
+        "trade_type": "매수",
+        "price": 70500,
+        "quantity": 10,
+        "datetime": "20251101143000",
+        "order_no": "12345678",
+        "has_recap": false
+      }
+    ],
+    "total_records": 1
+  }
+  ```
+
+#### 2. 프론트엔드 API 호출 변경 (front/src/lib/api.ts)
+- **파일**: `front/src/lib/api.ts`
+- **함수**: `tradingPlansAPI.getRecentTrades(limit = 20)`
+- 쿼리 파라미터: `limit=20` (이전: `days=10`)
+
+#### 3. 대시보드 페이지 수정 (front/src/app/dashboard/page.tsx)
+- **파일**: `front/src/app/dashboard/page.tsx`
+- **변경 사항**:
+  - fetchRecentTrades 함수에서 `getRecentTrades(20)` 호출 (이전: 10)
+  - 주석 업데이트: "Trading DB에서 조회"로 명시
+
+**동작 흐름**:
+1. 대시보드 복기 모드 진입
+2. `GET /api/trading-plans/trades/recent?limit=20` 호출
+3. Trading 테이블에서 최신순 20개 기록 조회
+4. 포맷팅하여 프론트로 반환
+5. 복기 모드 그리드에 표시
+
+### 2025-11-01: 로그인 후 매매 기록 자동 동기화 기능 추가
+
+#### 1. 매매 기록 동기화 API 엔드포인트 추가 (back/app/routers/trading_plans.py)
+- **파일**: `back/app/routers/trading_plans.py`
+- **새로운 엔드포인트**: `POST /api/trading-plans/trades/sync`
+  - 키움증권 Open API를 통해 최근 거래 기록 조회
+  - Trading 테이블에 새로운 기록만 추가 (중복 체크: order_no 기반)
+  - 쿼리 파라미터: `limit` (기본값: 20건) - 최근 순서로 20개 거래 기록 조회
+  - 응답 포맷:
+    ```json
+    {
+      "status": "success",
+      "message": "3건의 새로운 매매기록이 추가되었습니다.",
+      "synced_count": 3,
+      "duplicate_count": 2,
+      "total_count": 5
+    }
+    ```
+
+#### 2. 동기화 기능 상세 설명
+- **중복 체크**: order_no 기반으로 기존 기록 확인
+  - order_no가 이미 존재하면 스킵 (새로 추가하지 않음)
+  - order_no가 없는 기록도 처리 가능
+- **데이터 변환**:
+  - 날짜/시간: YYYYMMDDHHmmss → datetime 형식
+  - 매매구분: "매수" → "buy", "매도" → "sell"
+  - 체결금액 자동 계산: 가격 × 수량
+- **에러 처리**:
+  - 개별 레코드 오류 발생 시 해당 기록만 스킵, 나머지는 계속 처리
+  - 전체 동기화 실패 시 롤백 처리
+  - 키움 API 미설정 시 경고 반환
+
+#### 3. 프론트엔드 API 함수 추가 (front/src/lib/api.ts)
+- **파일**: `front/src/lib/api.ts`
+- **새 함수**: `tradingPlansAPI.syncRecentTrades(limit = 20)`
+  - POST `/api/trading-plans/trades/sync` 호출
+
+#### 4. 대시보드 자동 동기화 (front/src/app/dashboard/page.tsx)
+- **파일**: `front/src/app/dashboard/page.tsx`
+- **변경 사항**:
+  - useEffect 훅에서 대시보드 진입 시 자동으로 `syncRecentTrades` 호출
+  - 로그인 후 처음 대시보드에 진입할 때만 수행
+  - 동기화 실패 시 콘솔 로그만 출력, 대시보드는 정상 진행
+
+**동작 흐름**:
+1. 사용자 로그인
+2. 대시보드 페이지 이동
+3. 자동으로 `/api/trading-plans/trades/sync` 호출 (기본값: 최근 20개 거래 기록)
+4. 키움증권 API에서 최근 30일 매매 기록 조회 후 최신순 20개만 선택
+5. 새로운 기록만 Trading 테이블에 추가
+6. 기존 기록(order_no 기반)은 업데이트하지 않음
+
+### 2025-11-01: Trading 테이블 및 API 엔드포인트 추가
+
+#### 1. Trading 모델 추가 (back/app/models.py)
+- **파일**: `back/app/models.py`
+- **새 모델**: `Trading` 클래스
+  - `id`: 기본 키
+  - `user_id`: 사용자 외래키 (인덱싱)
+  - `executed_at`: 체결 시각 (DateTime, 인덱싱)
+  - `trade_type`: 매매구분 ('buy' or 'sell')
+  - `order_no`: 주문번호 (인덱싱)
+  - `stock_name`: 종목명
+  - `stock_code`: 종목코드 (인덱싱)
+  - `executed_price`: 체결 가격
+  - `executed_quantity`: 체결 수량
+  - `executed_amount`: 체결 금액 (BigInteger)
+  - `broker`: 증권사 (ex: 'kiwoom', 'kis')
+  - `created_at`, `updated_at`: 시스템 타임스탬프
+
+#### 2. Trading 스키마 추가 (back/app/schemas.py)
+- **파일**: `back/app/schemas.py`
+- **새 스키마**:
+  - `TradingBase`: 기본 필드 정의
+  - `TradingCreate`: 생성용 스키마
+  - `Trading`: 조회용 스키마 (id, user_id, created_at, updated_at 포함)
+
+#### 3. Trading API 라우터 생성 (back/app/routers/trading.py)
+- **파일**: `back/app/routers/trading.py` (신규)
+- **엔드포인트**:
+  - `POST /api/trading/`: 매매 기록 생성
+  - `GET /api/trading/`: 매매 기록 조회 (페이징, 필터링 지원)
+    - 쿼리 파라미터: limit, offset, trade_type, stock_code, start_date, end_date
+  - `GET /api/trading/{trading_id}`: 특정 매매 기록 조회
+  - `PUT /api/trading/{trading_id}`: 매매 기록 수정
+  - `DELETE /api/trading/{trading_id}`: 매매 기록 삭제
+  - `GET /api/trading/stats/summary`: 매매 통계 요약
+    - 총 거래 수, 매수/매도 거래 수, 총 거래 금액
+
+#### 4. 라우터 등록 (back/main.py)
+- **파일**: `back/main.py`
+- **변경 사항**:
+  - trading 라우터 import 추가
+  - `app.include_router(trading.router)` 추가
+
+**사용 예시**:
+```bash
+# 매매 기록 생성
+curl -X POST http://localhost:8000/api/trading/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {token}" \
+  -d '{
+    "executed_at": "2025-11-01T14:30:00",
+    "trade_type": "buy",
+    "order_no": "12345678",
+    "stock_name": "삼성전자",
+    "stock_code": "005930",
+    "executed_price": 70500,
+    "executed_quantity": 10,
+    "executed_amount": 705000,
+    "broker": "kiwoom"
+  }'
+
+# 매매 기록 조회 (최신순)
+curl -X GET "http://localhost:8000/api/trading/?limit=20&offset=0" \
+  -H "Authorization: Bearer {token}"
+
+# 특정 기간의 매매 기록 조회
+curl -X GET "http://localhost:8000/api/trading/?start_date=2025-11-01T00:00:00&end_date=2025-11-01T23:59:59" \
+  -H "Authorization: Bearer {token}"
+
+# 매매 통계 조회
+curl -X GET "http://localhost:8000/api/trading/stats/summary" \
+  -H "Authorization: Bearer {token}"
+```
+
+### 2025-11-01: 프론트엔드 포트 설정 정리 (3000: 운영, 3001: 개발)
+
+#### 1. Package.json 수정 (front/package.json)
+- **파일**: `front/package.json`
+- **변경 사항**:
+  - `start` 스크립트에 포트 명시: `"start": "next start -p 3000"`
+  - 이제 `npm start`를 실행하면 자동으로 포트 3000에서 시작
+
+#### 2. Ecosystem.config.js 수정 (ecosystem.config.js)
+- **파일**: `ecosystem.config.js`
+- **변경 사항**:
+  - PM2 `goni-frontend` 프로세스 설정 간소화
+  - `args: 'start'` (포트는 package.json에서 관리)
+  - NODE_ENV: production 유지
+
+#### 3. CLAUDE.md 업데이트 (CLAUDE.md)
+- **파일**: `CLAUDE.md`
+- **추가 섹션**: `# Port Configuration`
+  - 포트 3000 (운영/Production): PM2 `goni-frontend` 실행
+  - 포트 3001 (개발/Development): `npm run dev` 명령으로 개발 서버 실행
+
+#### 4. daily-chart.tsx 타입 에러 수정 (front/src/components/daily-chart.tsx)
+- **파일**: `front/src/components/daily-chart.tsx`
+- **변경 사항**:
+  - `datetimeStr?.toString()` → `String(datetimeStr)` (2개 위치)
+  - TypeScript 타입 에러 해결 (never 타입 에러)
+
+**설정 완료**:
+- 포트 3000: 운영 환경 (PM2 프로세스, 빌드된 Next.js)
+- 포트 3001: 개발 환경 (npm run dev, 핫 리로드)
+
+### 2025-10-31: 복기 모달에서 차트 Buy/Sell 마커 클릭 시 입력 필드 자동 포커스 기능 추가
+
+#### 1. DailyChart 컴포넌트 개선 (front/src/components/daily-chart.tsx)
+- **파일**: `front/src/components/daily-chart.tsx`
+- **변경 사항**:
+  - `onMarkerClick` 콜백 props 추가
+  - 차트 캔버스에 `onClick` 이벤트 핸들러 추가
+  - `handleCanvasClick` 함수 구현:
+    - 클릭 위치의 마커(Buy/Sell) 감지
+    - 원형 마커 영역 내 클릭 판정 (반지름 10px)
+    - 스케일 변환을 고려한 정확한 좌표 계산
+    - 클릭된 마커의 거래 정보를 콜백으로 전달
+
+#### 2. RecapModal 컴포넌트 개선 (front/src/components/recap-modal.tsx)
+- **파일**: `front/src/components/recap-modal.tsx`
+- **변경 사항**:
+  - `useRef` import 추가
+  - 텍스트 입력 필드에 대한 useRef 생성:
+    - `priceChartRef`: "가격(차트)" 필드 참조
+    - `volumeRef`: "거래량" 필드 참조
+  - `handleMarkerClick` 함수 구현:
+    - Buy(매수) 클릭 시:
+      - "가격(차트)" 필드로 자동 포커스
+      - 해당 필드로 부드러운 스크롤 (smooth scroll)
+    - Sell(매도) 클릭 시:
+      - "거래량" 필드로 자동 포커스
+      - 해당 필드로 부드러운 스크롤
+  - DailyChart 컴포넌트에 `onMarkerClick={handleMarkerClick}` 콜백 전달
+
+**기능**:
+- 차트에서 Buy/Sell 마커 클릭 시 관련 입력 필드로 자동 네비게이션
+- 사용자 편의성 향상: 마커 클릭으로 바로 입력 가능
+- 부드러운 스크롤로 시각적 피드백 제공
+
+### 2025-10-31: 프로필 페이지에 APP KEY/SECRET 마스킹 기능 추가
+
+#### 1. 프로필 페이지 개선 (front/src/app/profile/page.tsx)
+- **파일**: `front/src/app/profile/page.tsx`
+- **변경 사항**:
+  - `maskString()` 함수 추가: 문자열을 입력된 문자 개수만큼 * 로 마스킹
+  - APP KEY 입력 필드 개선:
+    - 기본값으로 마스킹된 상태 표시 (예: 40자 키 → ****************************************)
+    - 눈(Eye) 아이콘 클릭으로 실제 값과 마스킹 상태 전환
+    - 값이 등록되어 있지 않으면 눈 아이콘 미표시
+  - APP SECRET 입력 필드 개선:
+    - APP KEY와 동일한 마스킹 로직 적용
+    - 눈 아이콘 클릭으로 보이기/숨기기 토글
+    - 등록된 값이 있을 때만 눈 아이콘 표시
+  - 사용성 향상:
+    - 빈 입력 필드에는 플레이스홀더 표시
+    - 값이 있는 경우 플레이스홀더 숨김 (마스킹 텍스트와의 혼동 방지)
+    - 눈 아이콘에 title 속성 추가 (호버 시 "표시"/"숨기기" 표시)
+
+**기능**:
+- DB에 등록되어 있는 APP KEY와 APP SECRET이 정상적으로 저장되어 있음을 사용자에게 알림
+- 비밀번호 입력 필드처럼 기본값으로 마스킹 처리되어 보안 강화
+- 필요시 눈 아이콘으로 실제 값 확인 가능
+
 ### 2025-10-25: 복기 모달에 일봉 차트 시각화 추가
 
 #### 1. DailyChart 컴포넌트 개발 (front/src/components/daily-chart.tsx)

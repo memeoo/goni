@@ -64,6 +64,36 @@ class TradingPlan(Base):
     recap = relationship("Recap", back_populates="trading_plan", uselist=False)
 
 
+class Trading(Base):
+    __tablename__ = "trading"
+
+    id = sa.Column(sa.Integer, primary_key=True, index=True)
+    user_id = sa.Column(sa.Integer, sa.ForeignKey("users.id"), nullable=False, index=True)
+
+    # 체결 정보
+    executed_at = sa.Column(sa.DateTime, nullable=False, index=True)  # 체결 시각(날짜, 시간)
+    trade_type = sa.Column(sa.String, nullable=False)  # 매매구분 ('buy' or 'sell')
+    order_no = sa.Column(sa.String, nullable=True, index=True)  # 주문번호
+
+    # 종목 정보
+    stock_name = sa.Column(sa.String, nullable=False)  # 종목명
+    stock_code = sa.Column(sa.String, nullable=False, index=True)  # 종목코드
+
+    # 체결 가격 정보
+    executed_price = sa.Column(sa.Float, nullable=False)  # 체결 가격
+    executed_quantity = sa.Column(sa.Integer, nullable=False)  # 체결 수량
+    executed_amount = sa.Column(sa.BigInteger, nullable=False)  # 체결 금액 (가격 * 수량)
+
+    # 증권사 정보
+    broker = sa.Column(sa.String, nullable=False)  # 증권사 (ex: kiwoom, kis)
+
+    # 시스템 정보
+    created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
+    updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User")
+
+
 class Recap(Base):
     __tablename__ = "recap"
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import Cookies from 'js-cookie'
@@ -82,6 +82,10 @@ export default function RecapModal({
     etc: '',
   })
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  const [showFormInputs, setShowFormInputs] = useState(false)
+  const priceChartRef = useRef<HTMLTextAreaElement>(null)
+  const volumeRef = useRef<HTMLTextAreaElement>(null)
+  const formContainerRef = useRef<HTMLDivElement>(null)
 
   // 기존 복기 데이터 조회
   const { data: existingRecap, isLoading: recapLoading } = useQuery({
@@ -213,6 +217,7 @@ export default function RecapModal({
         evaluation_reason: '',
         etc: '',
       })
+      setShowFormInputs(false)
       // 쿼리 캐시 무효화하여 다음에 열릴 때 새로 조회하도록 함
       queryClient.removeQueries({ queryKey: ['recap'] })
     }
@@ -313,6 +318,29 @@ export default function RecapModal({
   ) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
+  }
+
+  // Buy/Sell 마커 클릭 처리
+  const handleMarkerClick = (trade: Trade) => {
+    const isLongTrade = trade.trade_type === '매수'
+
+    // 폼 입력 레이아웃 표시
+    setShowFormInputs(true)
+
+    // Buy일 경우 "가격(차트)" 필드에 포커스, Sell일 경우 "거래량" 필드에 포커스
+    if (isLongTrade) {
+      // Buy: 가격(차트) 필드로 스크롤 및 포커스
+      setTimeout(() => {
+        priceChartRef.current?.focus()
+        priceChartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }, 100)
+    } else {
+      // Sell: 거래량 필드로 스크롤 및 포커스
+      setTimeout(() => {
+        volumeRef.current?.focus()
+        volumeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }, 100)
+    }
   }
 
   // 호버된 봉의 정보를 포맷팅하는 함수
@@ -462,170 +490,179 @@ export default function RecapModal({
                   data={chartData}
                   trades={tradesData}
                   onHoveredIndexChange={setHoveredIndex}
+                  onMarkerClick={handleMarkerClick}
                 />
               </div>
             ) : null}
-            {/* Row 1: 재료 & 시황 */}
-            <div className="grid grid-cols-2 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  재료
-                </label>
-                <textarea
-                  name="catalyst"
-                  value={formData.catalyst}
-                  onChange={handleChange}
-                  placeholder="종목 매매의 근거가 된 재료를 입력하세요 (예: 실적 발표, 신제품 출시, 정책 변화 등)"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  rows={2}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  시황
-                </label>
-                <textarea
-                  name="market_condition"
-                  value={formData.market_condition}
-                  onChange={handleChange}
-                  placeholder="당시 시장 전반의 상황을 입력하세요 (예: 코스피 상승세, 업종별 동향 등)"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  rows={2}
-                />
-              </div>
-            </div>
 
-            {/* Row 2: 가격(차트) & 거래량 */}
-            <div className="grid grid-cols-2 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  가격(차트)
-                </label>
-                <textarea
-                  name="price_chart"
-                  value={formData.price_chart}
-                  onChange={handleChange}
-                  placeholder="차트 패턴, 지지/저항선, 기술적 지표 등을 입력하세요"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  rows={3}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  거래량
-                </label>
-                <textarea
-                  name="volume"
-                  value={formData.volume}
-                  onChange={handleChange}
-                  placeholder="거래량 추이 및 특이사항을 입력하세요"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  rows={3}
-                />
-              </div>
-            </div>
+            {/* 폼 입력 섹션 - Buy/Sell 아이콘 클릭 후에만 표시 */}
+            {showFormInputs && (
+              <div ref={formContainerRef}>
+                {/* Row 1: 재료 & 시황 */}
+                <div className="grid grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      재료
+                    </label>
+                    <textarea
+                      name="catalyst"
+                      value={formData.catalyst}
+                      onChange={handleChange}
+                      placeholder="종목 매매의 근거가 된 재료를 입력하세요 (예: 실적 발표, 신제품 출시, 정책 변화 등)"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      rows={2}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      시황
+                    </label>
+                    <textarea
+                      name="market_condition"
+                      value={formData.market_condition}
+                      onChange={handleChange}
+                      placeholder="당시 시장 전반의 상황을 입력하세요 (예: 코스피 상승세, 업종별 동향 등)"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      rows={2}
+                    />
+                  </div>
+                </div>
 
-            {/* Row 3: 수급(외국인/기관) & 심리(매매 당시의 감정) */}
-            <div className="grid grid-cols-2 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  수급(외국인/기관)
-                </label>
-                <textarea
-                  name="supply_demand"
-                  value={formData.supply_demand}
-                  onChange={handleChange}
-                  placeholder="외국인, 기관의 매수/매도 동향을 입력하세요"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  rows={3}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  심리(매매 당시의 감정)
-                </label>
-                <textarea
-                  name="emotion"
-                  value={formData.emotion}
-                  onChange={handleChange}
-                  placeholder="매매 결정 당시의 심리 상태, 감정을 솔직하게 입력하세요 (예: 두려움, 확신, 초조함 등)"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  rows={3}
-                />
-              </div>
-            </div>
+                {/* Row 2: 가격(차트) & 거래량 */}
+                <div className="grid grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      가격(차트)
+                    </label>
+                    <textarea
+                      ref={priceChartRef}
+                      name="price_chart"
+                      value={formData.price_chart}
+                      onChange={handleChange}
+                      placeholder="차트 패턴, 지지/저항선, 기술적 지표 등을 입력하세요"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      rows={3}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      거래량
+                    </label>
+                    <textarea
+                      ref={volumeRef}
+                      name="volume"
+                      value={formData.volume}
+                      onChange={handleChange}
+                      placeholder="거래량 추이 및 특이사항을 입력하세요"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      rows={3}
+                    />
+                  </div>
+                </div>
 
-            {/* Row 4: 평가 (Full Width) */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                평가
-              </label>
-              <div className="flex gap-6 mb-3">
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    name="evaluation"
-                    value="good"
-                    checked={formData.evaluation === 'good'}
-                    onChange={handleChange}
-                    className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="ml-2 text-gray-700">Good</span>
-                </label>
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    name="evaluation"
-                    value="so-so"
-                    checked={formData.evaluation === 'so-so'}
-                    onChange={handleChange}
-                    className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="ml-2 text-gray-700">So-So</span>
-                </label>
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    name="evaluation"
-                    value="bad"
-                    checked={formData.evaluation === 'bad'}
-                    onChange={handleChange}
-                    className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="ml-2 text-gray-700">Bad</span>
-                </label>
-              </div>
-            </div>
+                {/* Row 3: 수급(외국인/기관) & 심리(매매 당시의 감정) */}
+                <div className="grid grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      수급(외국인/기관)
+                    </label>
+                    <textarea
+                      name="supply_demand"
+                      value={formData.supply_demand}
+                      onChange={handleChange}
+                      placeholder="외국인, 기관의 매수/매도 동향을 입력하세요"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      rows={3}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      심리(매매 당시의 감정)
+                    </label>
+                    <textarea
+                      name="emotion"
+                      value={formData.emotion}
+                      onChange={handleChange}
+                      placeholder="매매 결정 당시의 심리 상태, 감정을 솔직하게 입력하세요 (예: 두려움, 확신, 초조함 등)"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      rows={3}
+                    />
+                  </div>
+                </div>
 
-            {/* Row 5: 평가이유 & 기타 */}
-            <div className="grid grid-cols-2 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  평가이유
-                </label>
-                <textarea
-                  name="evaluation_reason"
-                  value={formData.evaluation_reason}
-                  onChange={handleChange}
-                  placeholder="평가의 이유를 입력하세요"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  rows={3}
-                />
+                {/* Row 4: 평가 (Full Width) */}
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    평가
+                  </label>
+                  <div className="flex gap-6 mb-3">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="evaluation"
+                        value="good"
+                        checked={formData.evaluation === 'good'}
+                        onChange={handleChange}
+                        className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-gray-700">Good</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="evaluation"
+                        value="so-so"
+                        checked={formData.evaluation === 'so-so'}
+                        onChange={handleChange}
+                        className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-gray-700">So-So</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="evaluation"
+                        value="bad"
+                        checked={formData.evaluation === 'bad'}
+                        onChange={handleChange}
+                        className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-gray-700">Bad</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Row 5: 평가이유 & 기타 */}
+                <div className="grid grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      평가이유
+                    </label>
+                    <textarea
+                      name="evaluation_reason"
+                      value={formData.evaluation_reason}
+                      onChange={handleChange}
+                      placeholder="평가의 이유를 입력하세요"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      rows={3}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      기타(자유 기술)
+                    </label>
+                    <textarea
+                      name="etc"
+                      value={formData.etc}
+                      onChange={handleChange}
+                      placeholder="그 외 특이사항이나 배운 점을 자유롭게 입력하세요"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      rows={3}
+                    />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  기타(자유 기술)
-                </label>
-                <textarea
-                  name="etc"
-                  value={formData.etc}
-                  onChange={handleChange}
-                  placeholder="그 외 특이사항이나 배운 점을 자유롭게 입력하세요"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  rows={3}
-                />
-              </div>
-            </div>
+            )}
 
             {/* Footer Buttons */}
             <div className="flex justify-end gap-4 pt-4 border-t">

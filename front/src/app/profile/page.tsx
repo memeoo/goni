@@ -15,6 +15,12 @@ interface UserProfile {
   app_secret?: string
 }
 
+// 문자열을 * 로 마스킹하는 함수 (문자 개수만큼 * 표시)
+function maskString(str: string): string {
+  if (!str) return ''
+  return '*'.repeat(str.length)
+}
+
 export default function ProfilePage() {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -146,19 +152,22 @@ export default function ProfilePage() {
                 </label>
                 <div className="relative">
                   <input
-                    type={showAppKey ? 'text' : 'password'}
-                    value={appKey}
+                    type="text"
+                    value={showAppKey ? appKey : maskString(appKey)}
                     onChange={(e) => setAppKey(e.target.value)}
-                    placeholder="키움증권 APP KEY를 입력하세요"
+                    placeholder={appKey ? '' : '키움증권 APP KEY를 입력하세요'}
                     className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowAppKey(!showAppKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showAppKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
+                  {appKey && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAppKey(!showAppKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      title={showAppKey ? '숨기기' : '표시'}
+                    >
+                      {showAppKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -169,19 +178,22 @@ export default function ProfilePage() {
                 </label>
                 <div className="relative">
                   <input
-                    type={showAppSecret ? 'text' : 'password'}
-                    value={appSecret}
+                    type="text"
+                    value={showAppSecret ? appSecret : maskString(appSecret)}
                     onChange={(e) => setAppSecret(e.target.value)}
-                    placeholder="키움증권 APP SECRET을 입력하세요"
+                    placeholder={appSecret ? '' : '키움증권 APP SECRET을 입력하세요'}
                     className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowAppSecret(!showAppSecret)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showAppSecret ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
+                  {appSecret && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAppSecret(!showAppSecret)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      title={showAppSecret ? '숨기기' : '표시'}
+                    >
+                      {showAppSecret ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  )}
                 </div>
               </div>
 

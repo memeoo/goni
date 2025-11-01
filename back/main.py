@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 
 from app.database import database
-from app.routers import auth, stocks, trading_plans, recap
+from app.routers import auth, stocks, trading_plans, recap, trading
 
 
 @asynccontextmanager
@@ -43,6 +43,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 app.include_router(stocks.router, prefix="/api/stocks", tags=["stocks"])
 app.include_router(trading_plans.router, prefix="/api/trading-plans", tags=["trading-plans"])
+app.include_router(trading.router, tags=["trading"])
 app.include_router(recap.router)
 
 

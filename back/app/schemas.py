@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 
 class UserBase(BaseModel):
@@ -21,7 +21,9 @@ class User(UserBase):
     id: int
     is_active: bool
     created_at: datetime
-    
+    app_key: Optional[str] = None
+    app_secret: Optional[str] = None
+
     class Config:
         from_attributes = True
 
@@ -149,5 +151,34 @@ class ChartDataPoint(BaseModel):
 class DailyChartResponse(BaseModel):
     """일봉 차트 조회 응답"""
     stock_code: str
-    data: list[ChartDataPoint]
+    data: List[ChartDataPoint]
     total_records: int
+
+
+class TradingBase(BaseModel):
+    """매매 기록 기본 정보"""
+    executed_at: datetime  # 체결 시각(날짜, 시간)
+    trade_type: str  # 매매구분 ('buy' or 'sell')
+    order_no: Optional[str] = None  # 주문번호
+    stock_name: str  # 종목명
+    stock_code: str  # 종목코드
+    executed_price: float  # 체결 가격
+    executed_quantity: int  # 체결 수량
+    executed_amount: int  # 체결 금액
+    broker: str  # 증권사 (ex: kiwoom, kis)
+
+
+class TradingCreate(TradingBase):
+    """매매 기록 생성"""
+    pass
+
+
+class Trading(TradingBase):
+    """매매 기록 조회"""
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

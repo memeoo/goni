@@ -6,9 +6,13 @@
 # Tech Stack
 - back-end : fast api(latest)
 - front-end : next.js v.15 이상
-- analyze: python v.3.13 
+- analyze: python v.3.13
 - DB : postgresql (db name:goni, port:5432, user:goniadmin, password:shsbsy70)
-- 프로세스 관리: pm2. name: goni-backend(bak-end), goni-front(front-end)
+- 프로세스 관리: pm2. name: goni-backend(backend), goni-frontend(frontend)
+
+# Port Configuration
+- **포트 3000 (운영/Production)**: PM2 `goni-frontend` 프로세스가 실행하는 포트. `npm start -- -p 3000` 명령으로 빌드된 Next.js를 실행
+- **포트 3001 (개발/Development)**: `npm run dev` 명령으로 개발 서버 시작. 로컬 개발 및 테스트 용도
 
 # Project description
 - 이름:  Goni(영화 타짜의 주인공 ‘고니’ 처럼 타짜 급의 탑 트레이더가 되기 위한 매매 계획 및 복기 일지 프로그램)

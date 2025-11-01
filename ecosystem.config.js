@@ -27,8 +27,7 @@ module.exports = {
       watch: false,
       max_memory_restart: '1G',
       env: {
-        NODE_ENV: 'production',
-        PORT: 3000
+        NODE_ENV: 'production'
       },
       error_file: '/home/ubuntu/goni/logs/frontend-error.log',
       out_file: '/home/ubuntu/goni/logs/frontend-out.log',

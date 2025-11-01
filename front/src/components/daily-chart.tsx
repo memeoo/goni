@@ -31,6 +31,13 @@ interface DailyChartProps {
   data: ChartDataPoint[]
   trades?: Trade[] | null
   onHoveredIndexChange?: (index: number | null) => void
+  onMarkerClick?: (trade: Trade) => void
+}
+
+interface TooltipState {
+  trade: Trade
+  x: number
+  y: number
 }
 
 // YYYYMMDD 형식을 YYYY-MM-DD로 변환
@@ -55,10 +62,58 @@ const formatDateLabel = (dateStr: string): string => {
   return `${parseInt(month)}/${parseInt(day)}`
 }
 
-export default function DailyChart({ stockCode, data, trades, onHoveredIndexChange }: DailyChartProps) {
+// 거래 날짜 시간 포맷팅 (YYYYMMDDHHmmss 형식 -> YY.MM.dd일 hh:mm)
+const formatTradeDateTime = (datetimeStr: string | number): string => {
+  try {
+    if (typeof datetimeStr === 'string' && datetimeStr.length === 14) {
+      // YYYYMMDDHHmmss 형식 (예: 20251031152848)
+      const yy = datetimeStr.slice(2, 4)
+      const mm = datetimeStr.slice(4, 6)
+      const dd = datetimeStr.slice(6, 8)
+      const hh = datetimeStr.slice(8, 10)
+      const mins = datetimeStr.slice(10, 12)
+      return `${yy}.${mm}.${dd}일 ${hh}:${mins}`
+    }
+
+    // 다른 형식의 경우 처리
+    let date: Date
+
+    if (typeof datetimeStr === 'number') {
+      date = new Date(datetimeStr)
+    } else if (typeof datetimeStr === 'string') {
+      const parsed = parseInt(datetimeStr)
+      if (!isNaN(parsed) && datetimeStr.length > 10) {
+        date = new Date(parsed)
+      } else {
+        date = new Date(datetimeStr)
+      }
+    } else {
+      return String(datetimeStr) || '-'
+    }
+
+    // 유효한 날짜인지 확인
+    if (isNaN(date.getTime())) {
+      return String(datetimeStr) || '-'
+    }
+
+    const yy = date.getFullYear().toString().slice(-2)
+    const mm = String(date.getMonth() + 1).padStart(2, '0')
+    const dd = String(date.getDate()).padStart(2, '0')
+    const hh = String(date.getHours()).padStart(2, '0')
+    const mins = String(date.getMinutes()).padStart(2, '0')
+    return `${yy}.${mm}.${dd}일 ${hh}:${mins}`
+  } catch (error) {
+    console.warn('[formatTradeDateTime] Error formatting:', datetimeStr, error)
+    return datetimeStr?.toString() || '-'
+  }
+}
+
+export default function DailyChart({ stockCode, data, trades, onHoveredIndexChange, onMarkerClick }: DailyChartProps) {
   const canvasPriceRef = useRef<HTMLCanvasElement>(null)
   const canvasVolumeRef = useRef<HTMLCanvasElement>(null)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  const [hoveredMarkerIndex, setHoveredMarkerIndex] = useState<number | null>(null)
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
   // hoveredIndex 변경 시 부모 컴포넌트에 알림
   useEffect(() => {
@@ -395,12 +450,14 @@ export default function DailyChart({ stockCode, data, trades, onHoveredIndexChan
     }
   }, [chartConfig, hoveredIndex])
 
-  // 마우스 좌표에 따른 봉 인덱스 계산
+  // 마우스 좌표에 따른 봉 인덱스 계산 및 마커 호버 감지
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = e.currentTarget
     const rect = canvas.getBoundingClientRect()
     const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
     const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
 
     if (!chartConfig) return
 
@@ -411,6 +468,7 @@ export default function DailyChart({ stockCode, data, trades, onHoveredIndexChan
 
     if (relativeX < 0) {
       setHoveredIndex(null)
+      setTooltip(null)
       return
     }
 
@@ -420,10 +478,108 @@ export default function DailyChart({ stockCode, data, trades, onHoveredIndexChan
     } else {
       setHoveredIndex(null)
     }
+
+    // 마커 호버 감지
+    if (trades && trades.length > 0) {
+      const { data: chartData, priceMin, priceMax } = chartConfig
+      const width = canvas.width
+      const height = canvas.height
+      const chartPadding = { top: 20, right: 100, bottom: 5, left: 20 }
+      const chartWidthCalc = width - chartPadding.left - chartPadding.right
+      const chartHeight = height - chartPadding.top - chartPadding.bottom
+      const priceRange = priceMax - priceMin
+      const candleWidthCalc = chartWidthCalc / (chartData.length + 1)
+
+      let hoverTooltip: TooltipState | null = null
+
+      trades.forEach((trade, idx) => {
+        const tradeDateFormatted = formatTradeDate(trade.date)
+        const candleIndex = chartData.findIndex((c) => c.date === tradeDateFormatted)
+
+        if (candleIndex >= 0 && candleIndex < chartData.length) {
+          const candleX = chartPadding.left + candleWidthCalc * (candleIndex + 0.5)
+          const priceY = chartPadding.top + chartHeight * (1 - (trade.price - priceMin) / priceRange)
+
+          const textX = candleX - candleWidthCalc * 0.65
+          const textY = priceY
+          const circleRadius = 10
+
+          const clickX = x * scaleX
+          const clickY = y * scaleY
+          const distance = Math.sqrt((clickX - textX) ** 2 + (clickY - textY) ** 2)
+
+          if (distance <= circleRadius) {
+            // 첫 번째 호버 시에만 로깅 (과도한 로깅 방지)
+            if (idx === 0) {
+              console.log('[DailyChart] Trade datetime format:', {
+                datetime: trade.datetime,
+                type: typeof trade.datetime,
+                formatted: formatTradeDateTime(trade.datetime),
+              })
+            }
+            hoverTooltip = {
+              trade,
+              x: rect.left + x,
+              y: rect.top + y,
+            }
+          }
+        }
+      })
+
+      setTooltip(hoverTooltip)
+    }
   }
 
   const handleCanvasMouseLeave = () => {
     setHoveredIndex(null)
+    setHoveredMarkerIndex(null)
+    setTooltip(null)
+  }
+
+  // 캔버스 클릭 시 마커 감지 및 처리
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = e.currentTarget
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+
+    if (!chartConfig || !trades || trades.length === 0) return
+
+    const { data: chartData, priceMin, priceMax } = chartConfig
+    const width = canvas.width
+    const height = canvas.height
+    const padding = { top: 20, right: 100, bottom: 5, left: 20 }
+    const chartWidth = width - padding.left - padding.right
+    const chartHeight = height - padding.top - padding.bottom
+    const priceRange = priceMax - priceMin
+    const candleWidth = chartWidth / (chartData.length + 1)
+
+    // 마커 클릭 감지
+    trades.forEach((trade, tradeIndex) => {
+      const tradeDateFormatted = formatTradeDate(trade.date)
+      const candleIndex = chartData.findIndex((c) => c.date === tradeDateFormatted)
+
+      if (candleIndex >= 0 && candleIndex < chartData.length) {
+        const candleX = padding.left + candleWidth * (candleIndex + 0.5)
+        const priceY = padding.top + chartHeight * (1 - (trade.price - priceMin) / priceRange)
+
+        // 텍스트 위치 (봉의 왼쪽에 배치)
+        const textX = candleX - candleWidth * 0.65
+        const textY = priceY
+        const circleRadius = 10
+
+        // 클릭 좌표가 마커 원형 내에 있는지 확인 (스케일 적용)
+        const clickX = x * scaleX
+        const clickY = y * scaleY
+        const distance = Math.sqrt((clickX - textX) ** 2 + (clickY - textY) ** 2)
+
+        if (distance <= circleRadius) {
+          onMarkerClick?.(trade)
+        }
+      }
+    })
   }
 
   if (!chartConfig) {
@@ -435,7 +591,7 @@ export default function DailyChart({ stockCode, data, trades, onHoveredIndexChan
   }
 
   return (
-    <div className="w-full space-y-0">
+    <div className="w-full space-y-0 relative">
       {/* 가격 차트 */}
       <div className="bg-white border border-gray-200 rounded-t-lg p-2">
         <canvas
@@ -445,6 +601,7 @@ export default function DailyChart({ stockCode, data, trades, onHoveredIndexChan
           className="w-full block cursor-crosshair"
           onMouseMove={handleCanvasMouseMove}
           onMouseLeave={handleCanvasMouseLeave}
+          onClick={handleCanvasClick}
         />
       </div>
 
@@ -459,6 +616,48 @@ export default function DailyChart({ stockCode, data, trades, onHoveredIndexChan
           onMouseLeave={handleCanvasMouseLeave}
         />
       </div>
+
+      {/* 마커 호버 툴팁 */}
+      {tooltip && (
+        <div
+          className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-sm"
+          style={{
+            left: `${tooltip.x + 10}px`,
+            top: `${tooltip.y + 10}px`,
+            minWidth: '250px',
+          }}
+        >
+          <div className="space-y-1">
+            <div className="font-semibold text-gray-900">
+              {tooltip.trade.trade_type === '매수' ? '🔴 매수' : '🔵 매도'}
+            </div>
+            <div className="text-gray-700">
+              <span className="text-gray-600">체결가격: </span>
+              <span className="font-semibold">
+                {tooltip.trade.price.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            <div className="text-gray-700">
+              <span className="text-gray-600">체결수량: </span>
+              <span className="font-semibold">
+                {tooltip.trade.quantity.toLocaleString('ko-KR')}주
+              </span>
+            </div>
+            <div className="text-gray-700">
+              <span className="text-gray-600">체결금액: </span>
+              <span className="font-semibold">
+                {(tooltip.trade.price * tooltip.trade.quantity).toLocaleString('ko-KR', {
+                  maximumFractionDigits: 0,
+                })}
+              </span>
+            </div>
+            <div className="text-gray-700">
+              <span className="text-gray-600">날짜/시간: </span>
+              <span className="font-semibold">{formatTradeDateTime(tooltip.trade.datetime)}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -19,9 +19,9 @@ const fetchStocks = async () => {
   return []
 }
 
-// 실제 매매 내역 조회 함수
+// 실제 매매 내역 조회 함수 (Trading DB에서 조회)
 const fetchRecentTrades = async () => {
-  const response = await tradingPlansAPI.getRecentTrades(10)
+  const response = await tradingPlansAPI.getRecentTrades(20)
   return response.data
 }
 
@@ -55,8 +55,23 @@ export default function DashboardPage() {
   const isLoading = mode === 'plan' ? isLoadingStocks : isLoadingTrades
   const error = mode === 'plan' ? stocksError : tradesError
 
+  // 대시보드 진입 시 매매 기록 동기화
   useEffect(() => {
     setMounted(true)
+
+    // 로그인 후 처음 대시보드에 진입할 때만 동기화 수행
+    const syncTrades = async () => {
+      try {
+        console.log('📊 매매 기록 동기화 시작...')
+        const response = await tradingPlansAPI.syncRecentTrades(20)
+        console.log('✅ 매매 기록 동기화 완료:', response.data)
+      } catch (error) {
+        console.error('❌ 매매 기록 동기화 실패:', error)
+        // 동기화 실패해도 대시보드는 정상 진행
+      }
+    }
+
+    syncTrades()
   }, [])
 
   if (!mounted) return null

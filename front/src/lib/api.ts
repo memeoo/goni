@@ -103,6 +103,8 @@ export const tradingPlansAPI = {
     api.put(`/api/trading-plans/${planId}`, planData),
   deleteTradingPlan: (planId: number) =>
     api.delete(`/api/trading-plans/${planId}`),
-  getRecentTrades: (days = 10) =>
-    api.get(`/api/trading-plans/trades/recent?days=${days}`),
+  getRecentTrades: (limit = 20) =>
+    api.get(`/api/trading-plans/trades/recent?limit=${limit}`),
+  syncRecentTrades: (limit = 20) =>
+    api.post(`/api/trading-plans/trades/sync?limit=${limit}`),
 }
