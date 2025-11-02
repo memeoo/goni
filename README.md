@@ -106,6 +106,59 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-02: 차트 Buy/Sell 마커 데이터 소스 변경 (Kiwoom API → Trading DB)
+
+#### 1. 종목별 거래 기록 조회 API 추가 (back/app/routers/trading.py)
+- **파일**: `back/app/routers/trading.py`
+- **새로운 엔드포인트**: `GET /api/trading/{stock_code}/trades`
+  - 요청 파라미터:
+    - `stock_code`: 종목코드 (필수, 예: '005930')
+    - `limit`: 조회 개수 (선택, 기본값: 100)
+    - `offset`: 시작 위치 (선택, 기본값: 0)
+  - 응답 포맷:
+    ```json
+    {
+      "stock_code": "005930",
+      "trades": [
+        {
+          "date": "2025-11-01",
+          "price": 70500,
+          "quantity": 10,
+          "trade_type": "매수",
+          "order_no": "12345678",
+          "datetime": "20251101143000"
+        }
+      ],
+      "total_records": 5
+    }
+    ```
+  - 기능:
+    - 현재 사용자의 Trading 테이블에서 종목별 거래 기록 조회
+    - 실행 시간 역순으로 정렬 (최신 거래 먼저)
+    - 사용자별 데이터 분리 (current_user.id 기반 필터링)
+    - 응답 형식은 기존 Kiwoom API와 동일하게 통일
+
+#### 2. 복기 모달 차트 마커 데이터 소스 변경 (front/src/components/recap-modal.tsx)
+- **파일**: `front/src/components/recap-modal.tsx`
+- **변경 사항**:
+  - 매매 기록 조회 API 엔드포인트 변경
+  - 이전: `GET /api/stocks/{stock_code}/trades` (Kiwoom API)
+  - 현재: `GET /api/trading/{stock_code}/trades` (Trading DB)
+  - 인증 토큰 추가 (Trading DB 조회는 인증 필요)
+  - 로그 메시지 업데이트: "[RecapModal] 매매 기록 요청 (Trading DB)"
+
+**주요 이점**:
+- **성능 향상**: Kiwoom API 호출 제거 → 응답 속도 개선
+- **안정성**: API 오류 영향 없음, 안정적인 데이터 제공
+- **동기화**: 복기 모드에서 이미 동기화된 최신 거래 기록 사용
+- **일관성**: 대시보드와 복기 모달에서 동일한 데이터 소스 사용
+
+**사용 흐름**:
+1. 대시보드 복기 모드에서 종목 카드 클릭
+2. 복기 모달 열기 → 차트 데이터 + 거래 기록 조회
+3. `GET /api/trading/{stock_code}/trades` 호출
+4. Trading 테이블의 사용자 거래 기록으로 Buy/Sell 마커 표시
+
 ### 2025-11-02: 대시보드 종목 거래 기록 자동 동기화 (90일 조회, 백그라운드 처리)
 
 #### 1. 종목별 거래 기록 조회 API 개선 (back/app/routers/stocks.py)
