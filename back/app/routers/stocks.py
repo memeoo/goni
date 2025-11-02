@@ -555,8 +555,8 @@ async def get_stock_trades(
             use_mock=False
         )
 
-        # 최근 거래 기록 조회 (최대 60일)
-        all_trades = api.get_recent_trades(days=60)
+        # 최근 거래 기록 조회 (최대 90일)
+        all_trades = api.get_recent_trades(days=90)
 
         # 해당 종목의 거래만 필터링
         filtered_trades = [
@@ -567,6 +567,7 @@ async def get_stock_trades(
                 'trade_type': trade['trade_type'],
                 'order_no': trade['order_no'],
                 'datetime': trade['datetime'],
+                'executed_amount': trade.get('executed_amount', trade['price'] * trade['quantity']),  # executed_amount 추가
             }
             for trade in all_trades
             if trade['stock_code'] == stock_code

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { tradingPlansAPI } from '@/lib/api'
+import { tradingPlansAPI, tradingAPI } from '@/lib/api'
 import Header from '@/components/header'
 import PlanStockCard from '@/components/plan-stock-card'
 import TradeCard from '@/components/trade-card'
@@ -73,6 +73,38 @@ export default function DashboardPage() {
 
     syncTrades()
   }, [])
+
+  // 대시보드에 표시된 종목들의 거래 기록을 백그라운드에서 동기화
+  useEffect(() => {
+    // 복기 모드일 때만 종목별 거래 기록 동기화
+    if (mode !== 'review' || trades.length === 0) return
+
+    // 배경에서 실행하는 비동기 작업 (메인 UI를 블로킹하지 않음)
+    const syncDashboardTrades = async () => {
+      try {
+        // 현재 표시된 종목들의 코드 추출
+        const displayedStockCodes = Array.from(
+          new Set(trades.map((trade: any) => trade.stock_code))
+        ) as string[]
+
+        if (displayedStockCodes.length === 0) return
+
+        console.log('📥 대시보드 종목 거래 기록 동기화 시작...')
+        const response = await tradingAPI.syncDashboardTrades(displayedStockCodes)
+        console.log('✅ 대시보드 종목 거래 기록 동기화 완료:', response.data)
+      } catch (error) {
+        console.error('❌ 대시보드 종목 거래 기록 동기화 실패:', error)
+        // 동기화 실패는 무시하고 진행
+      }
+    }
+
+    // setTimeout을 사용해 백그라운드 작업으로 실행 (UI 렌더링 후에 실행)
+    const timeoutId = setTimeout(() => {
+      syncDashboardTrades()
+    }, 1000)  // 1초 지연 (UI 렌더링 완료 후 실행)
+
+    return () => clearTimeout(timeoutId)
+  }, [mode, trades])
 
   if (!mounted) return null
 

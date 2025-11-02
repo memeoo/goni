@@ -108,3 +108,8 @@ export const tradingPlansAPI = {
   syncRecentTrades: (limit = 20) =>
     api.post(`/api/trading-plans/trades/sync?limit=${limit}`),
 }
+
+export const tradingAPI = {
+  syncDashboardTrades: (stockCodes: string[]) =>
+    api.post('/api/trading/sync-dashboard-trades', { stock_codes: stockCodes }),
+}

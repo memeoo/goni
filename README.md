@@ -106,6 +106,84 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-02: 대시보드 종목 거래 기록 자동 동기화 (90일 조회, 백그라운드 처리)
+
+#### 1. 종목별 거래 기록 조회 API 개선 (back/app/routers/stocks.py)
+- **파일**: `back/app/routers/stocks.py`
+- **변경 사항**:
+  - `GET /{stock_code}/trades` 엔드포인트 수정
+  - 조회 기간: 60일 → 90일로 확대
+  - `executed_amount` 필드 추가: 체결 금액 자동 계산 (가격 × 수량)
+  - 응답 데이터에 `executed_amount` 포함
+
+#### 2. 대시보드 종목 거래 기록 동기화 API 추가 (back/app/routers/trading.py)
+- **파일**: `back/app/routers/trading.py`
+- **새로운 엔드포인트**: `POST /api/trading/sync-dashboard-trades`
+  - 요청 파라미터:
+    ```json
+    {
+      "stock_codes": ["005930", "000660"]
+    }
+    ```
+  - 대시보드에 표시된 종목들의 90일 거래 기록 조회
+  - Trading 테이블에 새로운 기록만 추가
+  - 중복 체크: `order_no` 기반으로 기존 기록 확인
+  - 응답 포맷:
+    ```json
+    {
+      "status": "success",
+      "message": "3건의 새로운 거래 기록이 추가되었습니다.",
+      "synced_count": 3,
+      "duplicate_count": 2,
+      "failed_count": 0
+    }
+    ```
+
+- **동작 로직**:
+  1. 받은 종목코드들의 거래 기록을 키움 API에서 조회 (90일)
+  2. 종목별로 필터링하여 처리
+  3. order_no 기반 중복 체크:
+     - 이미 존재하는 기록은 `duplicate_count` 증가
+     - 없는 기록만 Trading 테이블에 추가
+  4. datetime 형식 변환: YYYYMMDDHHmmss → datetime 객체
+  5. trade_type 변환: "매수" → 'buy', "매도" → 'sell'
+  6. executed_amount 계산: 가격 × 수량 (또는 API에서 제공된 값)
+  7. 모든 레코드 처리 완료 후 일괄 커밋
+
+#### 3. 프론트엔드 API 함수 추가 (front/src/lib/api.ts)
+- **파일**: `front/src/lib/api.ts`
+- **새 객체**: `tradingAPI`
+  - `syncDashboardTrades(stockCodes: string[])`: POST `/api/trading/sync-dashboard-trades` 호출
+
+#### 4. 대시보드 백그라운드 동기화 (front/src/app/dashboard/page.tsx)
+- **파일**: `front/src/app/dashboard/page.tsx`
+- **변경 사항**:
+  - `tradingAPI` import 추가
+  - 새로운 `useEffect` 훅 추가:
+    - 복기 모드일 때만 실행
+    - 대시보드에 표시된 종목들의 코드 추출
+    - `syncDashboardTrades` API 호출
+    - 1초 지연 후 백그라운드에서 실행 (UI 렌더링 완료 후)
+    - 동기화 실패 시 무시하고 진행 (UI 블로킹 안 함)
+
+**주요 기능**:
+- 대시보드에 표시되는 종목들의 거래 기록을 자동으로 조회
+- 거래 기록이 없으면 새로 추가, 기존 기록은 제외 (중복 방지)
+- 90일치 거래 기록을 모두 조회하여 포괄적인 데이터 수집
+- 백그라운드 작업으로 UI 블로킹 없음 (setTimeout 1초 지연)
+- 개별 거래 실패 시에도 계속 처리 (부분 동기화 지원)
+
+**사용 예시**:
+```bash
+# 백엔드 API 직접 호출
+curl -X POST http://localhost:8000/api/trading/sync-dashboard-trades \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {token}" \
+  -d '{
+    "stock_codes": ["005930", "000660", "035420"]
+  }'
+```
+
 ### 2025-11-02: 복기 모드 대시보드 UI 개선 - 매매 종목만 표시
 
 #### 1. 복기 모드에서 매매가 일어난 종목만 표시 (front/src/app/dashboard/page.tsx)
