@@ -143,16 +143,19 @@ export default function RecapModal({
     retry: 1, // 1회만 재시도
   })
 
-  // 매매 기록 조회
+  // 매매 기록 조회 (Trading 테이블에서)
   const { data: tradesData, isLoading: tradesLoading, error: tradesError } = useQuery({
     queryKey: ['stockTrades', stockCode],
     queryFn: async () => {
       if (!stockCode) return null
 
       try {
-        const url = `/api/stocks/${stockCode}/trades`
-        console.log('[RecapModal] 매매 기록 요청:', url)
-        const response = await fetch(url)
+        const token = Cookies.get('access_token') || localStorage.getItem('access_token')
+        const url = `/api/trading/${stockCode}/trades`
+        console.log('[RecapModal] 매매 기록 요청 (Trading DB):', url)
+        const response = await fetch(url, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
         if (!response.ok) {
           console.warn(`[RecapModal] 매매 기록 조회 실패: ${response.status}`)
           return null

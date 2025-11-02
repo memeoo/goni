@@ -35,6 +35,86 @@ def create_trading(
     return db_trading
 
 
+@router.get("/{stock_code}/trades")
+def get_stock_trades(
+    stock_code: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    limit: int = 100,
+    offset: int = 0
+):
+    """
+    특정 종목의 사용자 거래 기록 조회 (Trading 테이블에서)
+
+    Args:
+        stock_code: 종목코드 (6자리, 예: '005930')
+        limit: 조회 개수 (기본값: 100)
+        offset: 시작 위치 (기본값: 0)
+
+    Returns:
+        {
+            "stock_code": "005930",
+            "trades": [
+                {
+                    "date": "2025-11-01",
+                    "price": 70500,
+                    "quantity": 10,
+                    "trade_type": "매수",  # '매수' 또는 '매도'
+                    "order_no": "12345678",
+                    "datetime": "20251101143000"
+                },
+                ...
+            ],
+            "total_records": 5
+        }
+    """
+    try:
+        # 현재 사용자의 해당 종목 거래 기록 조회
+        query = db.query(Trading).filter(
+            Trading.user_id == current_user.id,
+            Trading.stock_code == stock_code
+        ).order_by(Trading.executed_at.desc())
+
+        total_records = query.count()
+        trades = query.offset(offset).limit(limit).all()
+
+        # 응답 데이터 포맷 변환
+        result_trades = []
+        for trade in trades:
+            # trade_type 변환: 'buy' -> '매수', 'sell' -> '매도'
+            trade_type_display = '매수' if trade.trade_type == 'buy' else '매도'
+
+            # datetime을 YYYYMMDDHHmmss 형식으로 변환
+            datetime_str = trade.executed_at.strftime('%Y%m%d%H%M%S')
+            date_str = trade.executed_at.strftime('%Y-%m-%d')
+
+            result_trades.append({
+                'date': date_str,
+                'price': trade.executed_price,
+                'quantity': trade.executed_quantity,
+                'trade_type': trade_type_display,
+                'order_no': trade.order_no or '',
+                'datetime': datetime_str,
+            })
+
+        print(f"✅ 종목 {stock_code}의 거래 기록 조회 완료: {len(result_trades)}건 (사용자: {current_user.id})")
+
+        return {
+            'stock_code': stock_code,
+            'trades': result_trades,
+            'total_records': total_records
+        }
+
+    except Exception as e:
+        print(f"❌ 거래 기록 조회 중 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"거래 기록 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+
 @router.get("/", response_model=List[TradingSchema])
 def get_trading_records(
     db: Session = Depends(get_db),
