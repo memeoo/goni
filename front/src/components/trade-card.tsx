@@ -13,25 +13,53 @@ interface TradeData {
 
 interface TradeCardProps {
   trade?: TradeData
+  currentPrice?: number
   onClick?: () => void
 }
 
-export default function TradeCard({ trade, onClick }: TradeCardProps) {
+export default function TradeCard({ trade, currentPrice, onClick }: TradeCardProps) {
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('ko-KR').format(num)
   }
 
   const formatDateTime = (dateTimeStr: string) => {
-    // YYYYMMDDHHmmss -> YYYY-MM-DD HH:mm
-    if (!dateTimeStr || dateTimeStr.length !== 14) return dateTimeStr
+    // YYYYMMDDHHmmss -> YYYY-MM-DD HH:mm 또는 ISO 형식 지원
+    if (!dateTimeStr) return ''
 
-    const year = dateTimeStr.substring(0, 4)
-    const month = dateTimeStr.substring(4, 6)
-    const day = dateTimeStr.substring(6, 8)
-    const hour = dateTimeStr.substring(8, 10)
-    const minute = dateTimeStr.substring(10, 12)
+    let dateStr = String(dateTimeStr)
 
-    return `${year}-${month}-${day} ${hour}:${minute}`
+    // 만약 ISO 형식(YYYY-MM-DDTHH:mm:ss 형태)이면 파싱
+    if (dateStr.includes('T') || dateStr.includes('-')) {
+      try {
+        const date = new Date(dateStr)
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        const hour = String(date.getHours()).padStart(2, '0')
+        const minute = String(date.getMinutes()).padStart(2, '0')
+        return `${year}-${month}-${day} ${hour}:${minute}`
+      } catch {
+        return dateStr
+      }
+    }
+
+    // YYYYMMDDHHmmss 형식 처리
+    if (dateStr.length === 14) {
+      const year = dateStr.substring(0, 4)
+      const month = dateStr.substring(4, 6)
+      const day = dateStr.substring(6, 8)
+      const hour = dateStr.substring(8, 10)
+      const minute = dateStr.substring(10, 12)
+      return `${year}-${month}-${day} ${hour}:${minute}`
+    }
+
+    return dateStr
+  }
+
+  const calculatePriceChange = (executedPrice: number, currentPrice: number) => {
+    const change = currentPrice - executedPrice
+    const changePercent = ((change / executedPrice) * 100).toFixed(2)
+    return { change, changePercent }
   }
 
   // Empty card when no trade data
@@ -46,10 +74,11 @@ export default function TradeCard({ trade, onClick }: TradeCardProps) {
 
   const isBuy = trade.trade_type === '매수'
   const totalAmount = trade.price * trade.quantity
+  const priceChangeInfo = currentPrice ? calculatePriceChange(trade.price, currentPrice) : null
 
   return (
     <div
-      className={`bg-white border-2 rounded-lg p-4 min-h-[280px] hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between ${
+      className={`bg-white border-2 rounded-lg p-4 min-h-[320px] hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between ${
         trade.has_recap
           ? 'border-green-400 bg-green-50'
           : 'border-gray-200'
@@ -106,6 +135,25 @@ export default function TradeCard({ trade, onClick }: TradeCardProps) {
               {formatNumber(totalAmount)}원
             </span>
           </div>
+
+          {/* Current Price */}
+          {currentPrice && (
+            <div className="flex items-center justify-between pt-2 border-t border-gray-100 bg-blue-50 -mx-4 -mb-3 px-4 py-2 rounded-b-lg">
+              <span className="text-sm font-semibold text-gray-700">현재가:</span>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-blue-600">
+                  {formatNumber(currentPrice)}원
+                </span>
+                {priceChangeInfo && (
+                  <span className={`text-xs font-medium ${
+                    priceChangeInfo.change >= 0 ? 'text-red-600' : 'text-blue-600'
+                  }`}>
+                    {priceChangeInfo.change >= 0 ? '+' : ''}{formatNumber(priceChangeInfo.change)}원 ({priceChangeInfo.changePercent}%)
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Date & Time */}

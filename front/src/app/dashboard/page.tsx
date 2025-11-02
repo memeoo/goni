@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { tradingPlansAPI } from '@/lib/api'
+import { tradingPlansAPI, stocksAPI } from '@/lib/api'
 import Header from '@/components/header'
 import PlanStockCard from '@/components/plan-stock-card'
 import TradeCard from '@/components/trade-card'
@@ -45,11 +45,44 @@ export default function DashboardPage() {
   })
 
   // 실제 매매 내역 조회 (복기 모드용)
-  const { data: tradesData, isLoading: isLoadingTrades, error: tradesError } = useQuery({
+  const { data: tradesData, isLoading: isLoadingTrades, error: tradesError, refetch: refetchTrades } = useQuery({
     queryKey: ['recentTrades'],
     queryFn: fetchRecentTrades,
     refetchInterval: 300000, // 5분마다 갱신
   })
+
+  // 종목별 현재가 조회
+  const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({})
+
+  // 매매 기록에서 종목 코드 추출
+  const uniqueStockCodes = Array.from(
+    new Set((tradesData?.data || []).map((trade: any) => trade.stock_code))
+  ) as string[]
+
+  // 각 종목의 현재가 조회
+  useEffect(() => {
+    if (uniqueStockCodes.length === 0) return
+
+    const fetchCurrentPrices = async () => {
+      const prices: Record<string, number> = {}
+
+      for (const stockCode of uniqueStockCodes) {
+        try {
+          const response = await stocksAPI.getCurrentPrice(stockCode)
+          if (response.data?.data?.current_price) {
+            prices[stockCode] = response.data.data.current_price
+          }
+        } catch (error) {
+          console.error(`현재가 조회 실패 (${stockCode}):`, error)
+          // 개별 종목 조회 실패는 무시하고 계속 진행
+        }
+      }
+
+      setCurrentPrices(prices)
+    }
+
+    fetchCurrentPrices()
+  }, [uniqueStockCodes])
 
   const trades = tradesData?.data || []
   const isLoading = mode === 'plan' ? isLoadingStocks : isLoadingTrades
@@ -134,10 +167,28 @@ export default function DashboardPage() {
     }
   }
 
+  // 복기 모드에서 종목별 최신 거래만 필터링
+  const getLatestTradesByStock = (trades: any[]) => {
+    const tradeMap = new Map<string, any>()
+
+    // 각 종목의 가장 최신 거래만 유지
+    for (const trade of trades) {
+      const stockCode = trade.stock_code
+      if (!tradeMap.has(stockCode)) {
+        tradeMap.set(stockCode, trade)
+      }
+    }
+
+    // Map을 배열로 변환하고 최신순 정렬
+    return Array.from(tradeMap.values()).sort((a, b) => {
+      return new Date(b.datetime).getTime() - new Date(a.datetime).getTime()
+    })
+  }
+
   // Create empty slots to fill grid to at least 8 items (2 rows × 4 columns)
   const createGridItems = (items: any[], mode: Mode) => {
     const minItems = 8
-    const gridItems = [...items]
+    const gridItems = mode === 'review' ? getLatestTradesByStock(items) : [...items]
 
     while (gridItems.length < minItems) {
       gridItems.push(null)
@@ -154,6 +205,7 @@ export default function DashboardPage() {
           <TradeCard
             trade={item}
             onClick={item ? () => handleStockCardClick(item.order_no || index, item) : undefined}
+            currentPrice={item ? currentPrices[item.stock_code] : undefined}
           />
         )}
       </div>
