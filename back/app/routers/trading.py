@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional, List
 from app.database import get_db
 from app.models import Trading, User
-from app.schemas import Trading as TradingSchema, TradingCreate
+from app.schemas import Trading as TradingSchema, TradingCreate, SyncDashboardTradesRequest
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/api/trading", tags=["trading"])
@@ -181,7 +181,7 @@ def get_trading_summary(
 
 @router.post("/sync-dashboard-trades")
 async def sync_dashboard_trades(
-    stock_codes: List[str],
+    request: SyncDashboardTradesRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -222,7 +222,7 @@ async def sync_dashboard_trades(
                 "message": "키움증권 API 설정이 완료되지 않았습니다",
                 "synced_count": 0,
                 "duplicate_count": 0,
-                "failed_count": len(stock_codes)
+                "failed_count": len(request.stock_codes)
             }
 
         api = KiwoomAPI(
@@ -247,7 +247,7 @@ async def sync_dashboard_trades(
         failed_count = 0
 
         # 각 종목별로 거래 기록 처리
-        for stock_code in stock_codes:
+        for stock_code in request.stock_codes:
             try:
                 # 해당 종목의 거래 필터링
                 stock_trades = [
@@ -328,7 +328,7 @@ async def sync_dashboard_trades(
             "message": f"키움증권 API 모듈을 불러올 수 없습니다: {str(e)}",
             "synced_count": 0,
             "duplicate_count": 0,
-            "failed_count": len(stock_codes)
+            "failed_count": len(request.stock_codes)
         }
     except Exception as e:
         print(f"❌ 거래 기록 동기화 중 오류: {e}")
@@ -340,5 +340,5 @@ async def sync_dashboard_trades(
             "message": f"거래 기록 동기화 중 오류가 발생했습니다: {str(e)}",
             "synced_count": 0,
             "duplicate_count": 0,
-            "failed_count": len(stock_codes)
+            "failed_count": len(request.stock_codes)
         }

@@ -182,3 +182,8 @@ class Trading(TradingBase):
 
     class Config:
         from_attributes = True
+
+
+class SyncDashboardTradesRequest(BaseModel):
+    """대시보드 종목 거래 기록 동기화 요청"""
+    stock_codes: List[str]  # 종목코드 리스트
