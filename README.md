@@ -106,7 +106,7 @@ python main.py
 
 ## ADDED or MODIFIED
 
-### 2025-11-02: 복기 모드 대시보드 UI 개선 - 매매 종목만 표시 및 현재가 추가
+### 2025-11-02: 복기 모드 대시보드 UI 개선 - 매매 종목만 표시
 
 #### 1. 복기 모드에서 매매가 일어난 종목만 표시 (front/src/app/dashboard/page.tsx)
 - **파일**: `front/src/app/dashboard/page.tsx`
@@ -120,55 +120,31 @@ python main.py
     - 매매가 일어난 종목만 그리드에 표시
     - 빈 그리드 셀은 최소 8개 유지 (2행 × 4열)
 
-#### 2. TradeCard에 현재가 정보 표시 (front/src/components/trade-card.tsx)
+#### 2. TradeCard 간소화 (front/src/components/trade-card.tsx)
 - **파일**: `front/src/components/trade-card.tsx`
 - **변경 사항**:
-  - `TradeCardProps` 인터페이스에 `currentPrice` prop 추가
-  - `calculatePriceChange()` 함수 추가:
-    - 체결가 대비 현재가의 변동액 계산
-    - 변동률 계산 (%)
+  - `currentPrice` prop 제거
+  - `calculatePriceChange()` 함수 제거
+  - 현재가 표시 기능 제거
   - `formatDateTime()` 함수 개선:
     - ISO 형식 (YYYY-MM-DDTHH:mm:ss) 지원 추가
     - YYYYMMDDHHmmss 형식도 계속 지원
     - 두 형식 모두 YYYY-MM-DD HH:mm로 통일 표시
-  - 현재가 표시 영역 추가:
-    - "현재가" 섹션을 파란색 배경으로 강조 표시
-    - 현재가와 함께 체결가 대비 변동액 및 변동률 표시
-    - 상승(+): 빨강, 하락(-): 파랑으로 색상 구분
-  - 카드 최소 높이 증가: 280px → 320px
+  - 카드 최소 높이: 280px 유지
 
-#### 3. 대시보드에서 현재가 데이터 조회 및 전달 (front/src/app/dashboard/page.tsx)
+#### 3. 대시보드 페이지 정리 (front/src/app/dashboard/page.tsx)
 - **파일**: `front/src/app/dashboard/page.tsx`
 - **변경 사항**:
-  - `stocksAPI` import 추가
-  - `currentPrices` 상태 추가: 종목코드별 현재가 저장
-  - 종목별 현재가 조회 로직:
-    - 매매 기록에서 종목 코드 추출 (중복 제거)
-    - 각 종목의 현재가를 `stocksAPI.getCurrentPrice()` 호출로 조회
-    - 개별 종목 조회 실패 시 해당 종목만 스킵, 다른 종목은 계속 조회
-  - TradeCard에 현재가 데이터 전달
+  - `stocksAPI` import 제거
+  - 현재가 조회 로직 제거
+  - `currentPrices` 상태 제거
+  - TradeCard prop 정리
 
 **주요 기능**:
 - 복기 모드에서 각 종목의 가장 최신 거래만 한 장의 카드로 표시
 - 중복된 종목의 이전 거래는 표시하지 않음
-- 각 카드에 실시간 현재가와 체결가 대비 손익률 표시
-- 사용자가 현재 상황을 빠르게 파악할 수 있음
-
-**응답 포맷**:
-- TradeCard에 전달되는 데이터:
-  ```json
-  {
-    "stock_code": "005930",
-    "stock_name": "삼성전자",
-    "trade_type": "매수",
-    "price": 70500,
-    "quantity": 10,
-    "datetime": "20251101143000",
-    "order_no": "12345678",
-    "has_recap": false,
-    "current_price": 71200  // 현재 추가됨
-  }
-  ```
+- 종목명, 거래 정보(체결가, 수량, 금액), 거래 시각 표시
+- 간단하고 명확한 UI로 거래 정보 확인 가능
 
 ### 2025-11-01: 복기 대시보드 데이터 소스 변경 (키움 API → Trading DB)
 

@@ -13,11 +13,10 @@ interface TradeData {
 
 interface TradeCardProps {
   trade?: TradeData
-  currentPrice?: number
   onClick?: () => void
 }
 
-export default function TradeCard({ trade, currentPrice, onClick }: TradeCardProps) {
+export default function TradeCard({ trade, onClick }: TradeCardProps) {
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('ko-KR').format(num)
   }
@@ -56,12 +55,6 @@ export default function TradeCard({ trade, currentPrice, onClick }: TradeCardPro
     return dateStr
   }
 
-  const calculatePriceChange = (executedPrice: number, currentPrice: number) => {
-    const change = currentPrice - executedPrice
-    const changePercent = ((change / executedPrice) * 100).toFixed(2)
-    return { change, changePercent }
-  }
-
   // Empty card when no trade data
   if (!trade) {
     return (
@@ -74,11 +67,10 @@ export default function TradeCard({ trade, currentPrice, onClick }: TradeCardPro
 
   const isBuy = trade.trade_type === '매수'
   const totalAmount = trade.price * trade.quantity
-  const priceChangeInfo = currentPrice ? calculatePriceChange(trade.price, currentPrice) : null
 
   return (
     <div
-      className={`bg-white border-2 rounded-lg p-4 min-h-[320px] hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between ${
+      className={`bg-white border-2 rounded-lg p-4 min-h-[280px] hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between ${
         trade.has_recap
           ? 'border-green-400 bg-green-50'
           : 'border-gray-200'
@@ -135,25 +127,6 @@ export default function TradeCard({ trade, currentPrice, onClick }: TradeCardPro
               {formatNumber(totalAmount)}원
             </span>
           </div>
-
-          {/* Current Price */}
-          {currentPrice && (
-            <div className="flex items-center justify-between pt-2 border-t border-gray-100 bg-blue-50 -mx-4 -mb-3 px-4 py-2 rounded-b-lg">
-              <span className="text-sm font-semibold text-gray-700">현재가:</span>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-blue-600">
-                  {formatNumber(currentPrice)}원
-                </span>
-                {priceChangeInfo && (
-                  <span className={`text-xs font-medium ${
-                    priceChangeInfo.change >= 0 ? 'text-red-600' : 'text-blue-600'
-                  }`}>
-                    {priceChangeInfo.change >= 0 ? '+' : ''}{formatNumber(priceChangeInfo.change)}원 ({priceChangeInfo.changePercent}%)
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Date & Time */}
