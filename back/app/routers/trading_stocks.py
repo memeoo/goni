@@ -43,7 +43,7 @@ def sync_trading_stocks_from_kiwoom(
         # Kiwoom API 인스턴스 생성
         kiwoom_api = KiwoomAPI(
             app_key=current_user.app_key,
-            app_secret=current_user.app_secret,
+            secret_key=current_user.app_secret,
             account_no="",  # 계정번호는 API 응답에서 자동 처리
             use_mock=False
         )
