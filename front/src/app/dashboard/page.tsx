@@ -2,27 +2,45 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { tradingPlansAPI, tradingAPI } from '@/lib/api'
+import { tradingAPI, tradingStocksAPI } from '@/lib/api'
 import Header from '@/components/header'
 import PlanStockCard from '@/components/plan-stock-card'
 import TradeCard from '@/components/trade-card'
 import RecapModal from '@/components/recap-modal'
 
-// 실제 주식 데이터 조회 함수
-// Next.js API route를 통해 프록시로 백엔드 호출 (상대 경로 사용)
-const fetchStocks = async () => {
-  // const response = await fetch('/api/stocks')
-  // if (!response.ok) {
-  //   throw new Error('주식 데이터 조회 실패')
-  // }
-  // return response.json()
-  return []
+// 매매 종목 조회 함수 (trading_stocks 테이블에서 조회)
+const fetchTradingStocks = async () => {
+  const response = await tradingStocksAPI.getTradingStocks(0, 100)
+
+  // 응답 데이터 형식에 따라 처리
+  const stocksData = response.data || (Array.isArray(response) ? response : [])
+
+  return stocksData.map((stock: any) => ({
+    id: stock.id,
+    stock_code: stock.stock_code,
+    stock_name: stock.stock_name,
+    is_downloaded: stock.is_downloaded,
+  }))
 }
 
 // 실제 매매 내역 조회 함수 (Trading DB에서 조회)
 const fetchRecentTrades = async () => {
-  const response = await tradingPlansAPI.getRecentTrades(20)
-  return response.data
+  const response = await tradingAPI.getRecentTrades(100)
+
+  // Trading API 응답을 TradeCard 형식으로 변환
+  const trades = Array.isArray(response) ? response : response.data || []
+
+  return trades.map((trade: any) => ({
+    id: trade.id,
+    stock_code: trade.stock_code,
+    stock_name: trade.stock_name,
+    trade_type: trade.trade_type === 'buy' ? '매수' : '매도', // 'buy'/'sell' -> '매수'/'매도'
+    price: trade.executed_price,
+    quantity: trade.executed_quantity,
+    datetime: trade.executed_at, // ISO 형식
+    order_no: trade.order_no,
+    has_recap: false, // TODO: 복기 여부 확인 로직 추가
+  }))
 }
 
 type Mode = 'plan' | 'review'
@@ -32,14 +50,15 @@ export default function DashboardPage() {
   const [mode, setMode] = useState<Mode>('review')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedTradingPlanId, setSelectedTradingPlanId] = useState<number | null>(null)
+  const [selectedTradingId, setSelectedTradingId] = useState<number | null>(null)
   const [selectedOrderNo, setSelectedOrderNo] = useState<string | undefined>(undefined)
   const [selectedStockName, setSelectedStockName] = useState<string | undefined>(undefined)
   const [selectedStockCode, setSelectedStockCode] = useState<string | undefined>(undefined)
 
-  // 실제 주식 데이터 조회 (계획 모드용)
+  // 매매 종목 데이터 조회 (계획 모드용)
   const { data: stocks = [], isLoading: isLoadingStocks, error: stocksError } = useQuery({
-    queryKey: ['stocks'],
-    queryFn: fetchStocks,
+    queryKey: ['tradingStocks'],
+    queryFn: fetchTradingStocks,
     refetchInterval: 60000, // 1분마다 갱신
     enabled: mode === 'plan', // 계획 모드일 때만 실행
   })
@@ -51,60 +70,28 @@ export default function DashboardPage() {
     refetchInterval: 300000, // 5분마다 갱신
   })
 
-  const trades = tradesData?.data || []
+  const trades = tradesData || []
   const isLoading = mode === 'plan' ? isLoadingStocks : isLoadingTrades
   const error = mode === 'plan' ? stocksError : tradesError
 
-  // 대시보드 진입 시 매매 기록 동기화
+  // 마운트 상태 설정 및 Kiwoom 자동 동기화
   useEffect(() => {
     setMounted(true)
 
-    // 로그인 후 처음 대시보드에 진입할 때만 동기화 수행
-    const syncTrades = async () => {
+    // 컴포넌트 마운트 시 Kiwoom에서 매매 기록 동기화
+    const syncKiwoomTrades = async () => {
       try {
-        console.log('📊 매매 기록 동기화 시작...')
-        const response = await tradingPlansAPI.syncRecentTrades(20)
-        console.log('✅ 매매 기록 동기화 완료:', response.data)
+        console.log('🔄 Kiwoom API에서 매매 기록 동기화 중...')
+        const response = await tradingStocksAPI.syncFromKiwoom(30) // 최근 30일 조회
+        console.log('✅ Kiwoom 동기화 완료:', response.data)
       } catch (error) {
-        console.error('❌ 매매 기록 동기화 실패:', error)
-        // 동기화 실패해도 대시보드는 정상 진행
+        console.warn('⚠️ Kiwoom 동기화 실패:', error)
+        // 동기화 실패해도 계속 진행 (기존 데이터 표시)
       }
     }
 
-    syncTrades()
+    syncKiwoomTrades()
   }, [])
-
-  // 대시보드에 표시된 종목들의 거래 기록을 백그라운드에서 동기화
-  useEffect(() => {
-    // 복기 모드일 때만 종목별 거래 기록 동기화
-    if (mode !== 'review' || trades.length === 0) return
-
-    // 배경에서 실행하는 비동기 작업 (메인 UI를 블로킹하지 않음)
-    const syncDashboardTrades = async () => {
-      try {
-        // 현재 표시된 종목들의 코드 추출
-        const displayedStockCodes = Array.from(
-          new Set(trades.map((trade: any) => trade.stock_code))
-        ) as string[]
-
-        if (displayedStockCodes.length === 0) return
-
-        console.log('📥 대시보드 종목 거래 기록 동기화 시작...')
-        const response = await tradingAPI.syncDashboardTrades(displayedStockCodes)
-        console.log('✅ 대시보드 종목 거래 기록 동기화 완료:', response.data)
-      } catch (error) {
-        console.error('❌ 대시보드 종목 거래 기록 동기화 실패:', error)
-        // 동기화 실패는 무시하고 진행
-      }
-    }
-
-    // setTimeout을 사용해 백그라운드 작업으로 실행 (UI 렌더링 후에 실행)
-    const timeoutId = setTimeout(() => {
-      syncDashboardTrades()
-    }, 1000)  // 1초 지연 (UI 렌더링 완료 후 실행)
-
-    return () => clearTimeout(timeoutId)
-  }, [mode, trades])
 
   if (!mounted) return null
 
@@ -151,18 +138,17 @@ export default function DashboardPage() {
     console.log('전략 관리')
   }
 
-  const handleStockCardClick = (id: number, trade?: any) => {
-    if (mode === 'review' && trade) {
+  const handleStockCardClick = (tradeId: number) => {
+    if (mode === 'review') {
       // 복기 모드에서는 모달 열기
-      // trade 데이터에는 order_no만 있고 trading_plan_id가 없음
+      // trading_id를 기반으로 거래 기록과 매핑
       setSelectedTradingPlanId(null)
-      setSelectedOrderNo(trade.order_no)
-      setSelectedStockName(trade.stock_name || trade.name)
-      setSelectedStockCode(trade.stock_code)
+      setSelectedTradingId(tradeId)
+      setSelectedOrderNo(undefined)
       setIsModalOpen(true)
     } else {
       // 계획 모드에서는 아직 미구현
-      console.log(`카드 클릭: ${id}`)
+      console.log(`카드 클릭: ${tradeId}`)
     }
   }
 
@@ -180,7 +166,14 @@ export default function DashboardPage() {
 
     // Map을 배열로 변환하고 최신순 정렬
     return Array.from(tradeMap.values()).sort((a, b) => {
-      return new Date(b.datetime).getTime() - new Date(a.datetime).getTime()
+      try {
+        const aTime = a.datetime ? new Date(a.datetime).getTime() : 0
+        const bTime = b.datetime ? new Date(b.datetime).getTime() : 0
+        return bTime - aTime
+      } catch (e) {
+        console.warn('[getLatestTradesByStock] Error parsing date:', a.datetime, b.datetime)
+        return 0
+      }
     })
   }
 
@@ -203,7 +196,7 @@ export default function DashboardPage() {
         ) : (
           <TradeCard
             trade={item}
-            onClick={item ? () => handleStockCardClick(item.order_no || index, item) : undefined}
+            onClick={item && item.id ? handleStockCardClick : undefined}
           />
         )}
       </div>
@@ -259,6 +252,7 @@ export default function DashboardPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         tradingPlanId={selectedTradingPlanId}
+        tradingId={selectedTradingId}
         orderNo={selectedOrderNo}
         stockName={selectedStockName}
         stockCode={selectedStockCode}

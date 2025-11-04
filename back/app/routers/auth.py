@@ -9,7 +9,7 @@ import os
 
 from app.database import SessionLocal, engine
 from app import schemas, models
-from app.models import User
+from app.models import User, TradingHistory, TradingStock
 
 router = APIRouter()
 
@@ -61,6 +61,81 @@ def get_user_by_email(db: Session, email: str):
     return db.query(User).filter(User.email == email).first()
 
 
+def sync_user_traded_stocks(db: Session, user_id: int):
+    """
+    사용자의 거래 기록에서 종목 정보를 추출하여 trading_stocks 테이블에 동기화
+    """
+    try:
+        print(f"\n[SYNC] 종목 동기화 시작: user_id={user_id}")
+
+        # 사용자의 모든 거래 기록 조회
+        trades = db.query(TradingHistory).filter(
+            TradingHistory.user_id == user_id
+        ).all()
+
+        print(f"[SYNC] TradingHistory 조회 완료: {len(trades)}건")
+
+        if not trades:
+            print(f"[SYNC] ⚠️ 사용자 {user_id}의 거래 기록이 없습니다.")
+            return {"added": 0, "updated": 0}
+
+        # 고유한 종목 추출 (stock_code 기준)
+        unique_stocks = {}
+        for idx, trade in enumerate(trades):
+            print(f"[SYNC]   거래 {idx+1}: code={trade.stock_code}, name={trade.stock_name}")
+            if trade.stock_code not in unique_stocks:
+                unique_stocks[trade.stock_code] = {
+                    'stock_code': trade.stock_code,
+                    'stock_name': trade.stock_name
+                }
+
+        print(f"[SYNC] 고유 종목 추출 완료: {len(unique_stocks)}개")
+        for code, info in unique_stocks.items():
+            print(f"[SYNC]   - {code}: {info['stock_name']}")
+
+        # trading_stocks 테이블에 업데이트
+        added_count = 0
+        updated_count = 0
+
+        for stock_code, stock_info in unique_stocks.items():
+            print(f"[SYNC] 종목 처리: {stock_code} ({stock_info['stock_name']})")
+
+            # 기존 종목 확인
+            existing_stock = db.query(TradingStock).filter(
+                TradingStock.stock_code == stock_code
+            ).first()
+
+            if existing_stock:
+                print(f"[SYNC]   → 기존 종목 업데이트")
+                # 기존 종목 - stock_name 업데이트 (is_downloaded는 유지)
+                existing_stock.stock_name = stock_info['stock_name']
+                existing_stock.updated_at = datetime.utcnow()
+                updated_count += 1
+            else:
+                print(f"[SYNC]   → 신규 종목 추가")
+                # 신규 종목 추가
+                new_stock = TradingStock(
+                    stock_name=stock_info['stock_name'],
+                    stock_code=stock_code,
+                    is_downloaded=False
+                )
+                db.add(new_stock)
+                added_count += 1
+
+        print(f"[SYNC] DB 커밋 전: {added_count}건 추가 예정, {updated_count}건 업데이트 예정")
+        db.commit()
+        print(f"[SYNC] ✅ DB 커밋 완료")
+        print(f"[SYNC] ✅ 사용자 {user_id}의 거래 종목 동기화 완료: {added_count}건 추가, {updated_count}건 업데이트")
+
+        return {"added": added_count, "updated": updated_count}
+
+    except Exception as e:
+        print(f"[SYNC] ❌ 거래 종목 동기화 중 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"added": 0, "updated": 0, "error": str(e)}
+
+
 def authenticate_user(db: Session, username: str, password: str):
     user = get_user_by_username(db, username)
     if not user:
@@ -101,17 +176,28 @@ async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
+    print(f"\n[LOGIN] /token 엔드포인트 호출: username={form_data.username}")
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
+        print(f"[LOGIN] ❌ 인증 실패: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    print(f"[LOGIN] ✅ 인증 성공: {user.username} (user_id={user.id})")
+
+    # 로그인 성공 시 사용자의 거래 종목 동기화
+    print(f"[LOGIN] 거래 종목 동기화 시작...")
+    sync_result = sync_user_traded_stocks(db, user.id)
+    print(f"[LOGIN] 거래 종목 동기화 결과: {sync_result}")
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
+    print(f"[LOGIN] ✅ 토큰 발급 완료\n")
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -121,16 +207,27 @@ async def login(
     db: Session = Depends(get_db)
 ):
     """JSON 기반 로그인 엔드포인트"""
+    print(f"\n[LOGIN] /login 엔드포인트 호출: username={login_data.username}")
     user = authenticate_user(db, login_data.username, login_data.password)
     if not user:
+        print(f"[LOGIN] ❌ 인증 실패: {login_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
+
+    print(f"[LOGIN] ✅ 인증 성공: {user.username} (user_id={user.id})")
+
+    # 로그인 성공 시 사용자의 거래 종목 동기화
+    print(f"[LOGIN] 거래 종목 동기화 시작...")
+    sync_result = sync_user_traded_stocks(db, user.id)
+    print(f"[LOGIN] 거래 종목 동기화 결과: {sync_result}")
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
+    print(f"[LOGIN] ✅ 토큰 발급 완료\n")
     return {"access_token": access_token, "token_type": "bearer"}
 
 

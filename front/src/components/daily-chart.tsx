@@ -18,12 +18,12 @@ interface ChartDataPoint {
 }
 
 interface Trade {
-  date: string // YYYYMMDD
+  date: string // YYYYMMDD format (e.g., '20251101') - will be converted to YYYY-MM-DD for chart matching
   price: number
   quantity: number
   trade_type: string // '매수' 또는 '매도'
   order_no: string
-  datetime: string
+  datetime: string // YYYYMMDDHHmmss format
 }
 
 interface DailyChartProps {
@@ -271,12 +271,28 @@ export default function DailyChart({ stockCode, data, trades, onHoveredIndexChan
 
     // 거래 마커 그리기
     if (trades && trades.length > 0) {
-      trades.forEach((trade) => {
-        // 거래 날짜를 YYYY-MM-DD 형식으로 변환
+      console.log('[DailyChart] Drawing trade markers:', {
+        tradesCount: trades.length,
+        chartDataLength: chartData.length,
+        firstTrade: trades[0],
+        sampleChartDates: chartData.slice(0, 3).map((d) => d.date),
+      })
+
+      trades.forEach((trade, idx) => {
+        // 거래 날짜를 YYYY-MM-DD 형식으로 변환 (YYYYMMDD -> YYYY-MM-DD)
         const tradeDateFormatted = formatTradeDate(trade.date)
 
         // 차트 데이터에서 해당 날짜의 봉 찾기
         const candleIndex = chartData.findIndex((c) => c.date === tradeDateFormatted)
+
+        if (idx === 0) {
+          console.log('[DailyChart] First trade match attempt:', {
+            tradeDate: trade.date,
+            tradeDateFormatted,
+            candleIndex,
+            found: candleIndex >= 0,
+          })
+        }
 
         if (candleIndex >= 0 && candleIndex < chartData.length) {
           // X 좌표 계산 (봉의 중심)

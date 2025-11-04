@@ -1,6 +1,7 @@
 import { Clock, TrendingUp, TrendingDown, FileText, CheckCircle } from 'lucide-react'
 
 interface TradeData {
+  id?: number  // Trading 테이블의 ID
   stock_code: string
   stock_name: string
   trade_type: string  // '매수' 또는 '매도'
@@ -13,7 +14,7 @@ interface TradeData {
 
 interface TradeCardProps {
   trade?: TradeData
-  onClick?: () => void
+  onClick?: (tradeId: number) => void
 }
 
 export default function TradeCard({ trade, onClick }: TradeCardProps) {
@@ -75,7 +76,7 @@ export default function TradeCard({ trade, onClick }: TradeCardProps) {
           ? 'border-green-400 bg-green-50'
           : 'border-gray-200'
       }`}
-      onClick={onClick}
+      onClick={() => trade.id && onClick?.(trade.id)}
     >
       <div>
         {/* Header */}

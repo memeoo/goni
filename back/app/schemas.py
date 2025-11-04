@@ -113,6 +113,7 @@ class RecapBase(BaseModel):
 
 class RecapCreate(RecapBase):
     trading_plan_id: Optional[int] = None
+    trading_id: Optional[int] = None
     order_no: Optional[str] = None
 
 
@@ -124,6 +125,7 @@ class Recap(RecapBase):
     id: int
     user_id: int
     trading_plan_id: Optional[int] = None
+    trading_id: Optional[int] = None
     order_no: Optional[str] = None
     created_at: datetime
     updated_at: datetime

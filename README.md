@@ -106,6 +106,143 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-05: CORS 크로스 오리진 요청 경고 및 로그인 이중화 문제 해결
+
+#### 문제 상황
+- **증상**: AWS 서버 (IP: 3.34.102.218)에서 로그인 시 CORS 경고 메시지 출력 및 로그인을 두 번 해야 정상 진입
+- **원인**: Next.js 개발 서버 (포트 3001)가 외부 IP의 `/_next/*` 정적 리소스 요청을 거부 (CORS 검증)
+
+#### 해결 방법
+
+##### 1. next.config.js 설정 업데이트 (front/next.config.js)
+- **파일**: `front/next.config.js`
+- **변경 사항**:
+  - `experimental.allowedDevOrigins` 설정 추가
+  - 허용 오리진: `['3.34.102.218', 'localhost', '127.0.0.1']`
+  - 이를 통해 AWS 서버의 크로스 오리진 요청 허용
+
+```javascript
+experimental: {
+  allowedDevOrigins: ['3.34.102.218', 'localhost', '127.0.0.1'],
+}
+```
+
+##### 2. 개발 서버 재시작 (포트 3001)
+```bash
+cd front
+npm run dev
+```
+
+##### 3. 프로덕션 배포 (포트 3000)
+```bash
+npm run build
+npm start -- -p 3000
+# 또는 PM2
+pm2 restart goni-frontend
+```
+
+**주의사항**:
+- 개발 환경 (포트 3001)과 프로덕션 환경 (포트 3000)을 명확히 구분
+- 다른 IP에서 접속하는 경우 `allowedDevOrigins`에 추가
+
+#### 기술 상세
+
+**왜 로그인을 두 번 해야 하는가?**
+1. CORS 에러 발생 시 일부 정적 리소스 로딩 실패
+2. 토큰 설정 프로세스 중단
+3. axios 인터셉터가 불완전한 토큰 상태 감지
+4. 사용자가 재로그인 필요 (토큰 재설정)
+
+**Next.js allowedDevOrigins의 역할**
+- 개발 서버의 보안 헤더 검증 과정에서 지정된 오리진의 요청을 허용
+- `Host` 헤더와 요청 오리진 검증을 통과하여 정적 리소스 정상 로딩
+- 토큰 설정 완료 후 정상 로그인
+
+#### 테스트 방법
+1. AWS 서버에서 `http://localhost:3001` (또는 서버 IP:3001) 접속
+2. 로그인 수행
+3. 콘솔에서 CORS 경고 메시지 없음 확인
+4. 한 번의 로그인으로 대시보드 진입 확인
+
+### 2025-11-03: Kiwoom API를 통한 실제 매매 기록 자동 동기화 기능 추가 (get_recent_trades 사용)
+
+#### 1. 새로운 엔드포인트: Kiwoom 거래 데이터 동기화 (back/app/routers/trading_stocks.py)
+- **파일**: `back/app/routers/trading_stocks.py`
+- **새로운 엔드포인트**: `POST /api/trading-stocks/sync-from-kiwoom`
+  - 요청 파라미터:
+    - `days`: 조회할 일수 (선택, 기본값: 30일)
+  - 응답 포맷:
+    ```json
+    {
+      "message": "Kiwoom 매매 기록 동기화 완료",
+      "added_trades": 3,
+      "added_stocks": 2,
+      "updated_stocks": 1,
+      "total_stocks": 3
+    }
+    ```
+
+- **동작 로직**:
+  1. 사용자 DB에 저장된 Kiwoom 계정 정보 (app_key, app_secret) 확인
+  2. `KiwoomAPI.get_recent_trades(days=30)` 호출하여 **최근 30일간의 모든 거래 기록 조회**
+     - 당일 거래뿐 아니라 과거 30일의 모든 거래 데이터를 한 번에 수집
+  3. **1단계**: 조회한 매매 기록을 `TradingHistory` 테이블에 저장
+     - order_no 기반 중복 체크 (이미 존재하면 스킵)
+     - 날짜시간 파싱: YYYYMMDDHHmmss → datetime 변환
+     - 체결금액 자동 계산: 가격 × 수량
+     - 매매구분: '매수', '매도'
+  4. **2단계**: 조회한 모든 거래의 종목들을 `trading_stocks` 테이블에 저장/업데이트
+     - 신규 종목: 추가 (is_downloaded=False로 초기화)
+     - 기존 종목: stock_name 업데이트 (is_downloaded 유지)
+  5. 모든 변경 사항을 일괄 커밋
+
+- **주요 기능**:
+  - 실제 Kiwoom API에서 매매 기록 조회 (mock 데이터 없음)
+  - order_no 기반 중복 체크로 중복 저장 방지
+  - 사용자별 계정 정보로 인증 (보안)
+  - 실패한 개별 기록만 스킵하고 나머지는 계속 처리
+  - 통합된 응답으로 추가/업데이트된 개수 확인 가능
+
+#### 2. 프론트엔드 API 함수 추가 (front/src/lib/api.ts)
+- **파일**: `front/src/lib/api.ts`
+- **새 함수**: `tradingStocksAPI.syncFromKiwoom(days = 5)`
+  - POST `/api/trading-stocks/sync-from-kiwoom?days={days}` 호출
+
+#### 3. 대시보드 자동 동기화 (front/src/app/dashboard/page.tsx)
+- **파일**: `front/src/app/dashboard/page.tsx`
+- **변경 사항**:
+  - `useEffect` 훅에서 컴포넌트 마운트 시 자동으로 `syncFromKiwoom` 호출
+  - 30일 조회: `syncFromKiwoom(30)` (최근 30일간의 모든 매매 기록 동기화)
+  - 동기화 실패 시 콘솔 경고만 표시, UI는 계속 진행 (에러 무시)
+  - 사용자가 정보 입력 후 대시보드 방문 시마다 최신 정보 자동 업데이트
+
+**동작 흐름**:
+1. 사용자 로그인 → 프로필 페이지에서 Kiwoom 계정 정보 등록
+2. 대시보드 페이지 접속
+3. 자동으로 `POST /api/trading-stocks/sync-from-kiwoom?days=30` 호출
+4. `KiwoomAPI.get_recent_trades(days=30)` 호출로 최근 30일 거래 기록 조회
+5. TradingHistory 테이블에 새 거래 기록 저장
+6. trading_stocks 테이블에 거래한 모든 종목 저장/업데이트
+7. **계획 모드**의 종목 목록 자동 갱신 (실제 거래 종목만 표시)
+
+**주요 이점**:
+- **실제 데이터**: Mock 데이터 없이 Kiwoom API에서 직접 조회
+- **자동화**: 사용자 개입 없이 자동 동기화
+- **안전성**: 중복 체크로 데이터 일관성 유지
+- **사용자별 격리**: app_key/app_secret으로 사용자별 계정 관리
+- **포괄적 조회**: 90일의 모든 거래 기록 포함
+
+**사용 예시**:
+```bash
+# 백엔드 API 직접 호출 (5일 조회)
+curl -X POST http://localhost:8000/api/trading-stocks/sync-from-kiwoom?days=5 \
+  -H "Authorization: Bearer {token}"
+
+# 90일 조회
+curl -X POST http://localhost:8000/api/trading-stocks/sync-from-kiwoom?days=90 \
+  -H "Authorization: Bearer {token}"
+```
+
 ### 2025-11-02: 차트 Buy/Sell 마커 데이터 소스 변경 (Kiwoom API → Trading DB)
 
 #### 1. 종목별 거래 기록 조회 API 추가 (back/app/routers/trading.py)

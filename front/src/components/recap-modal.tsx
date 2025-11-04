@@ -56,6 +56,7 @@ interface RecapModalProps {
   isOpen: boolean
   onClose: () => void
   tradingPlanId: number | null
+  tradingId?: number | null  // Trading 테이블의 ID
   orderNo?: string
   stockName?: string
   stockCode?: string
@@ -65,6 +66,7 @@ export default function RecapModal({
   isOpen,
   onClose,
   tradingPlanId,
+  tradingId,
   orderNo,
   stockName,
   stockCode,
@@ -89,13 +91,15 @@ export default function RecapModal({
 
   // 기존 복기 데이터 조회
   const { data: existingRecap, isLoading: recapLoading } = useQuery({
-    queryKey: ['recap', orderNo || tradingPlanId],
+    queryKey: ['recap', tradingId || orderNo || tradingPlanId],
     queryFn: async () => {
       const token = Cookies.get('access_token') || localStorage.getItem('access_token')
 
-      // order_no가 있으면 order_no로 조회, 없으면 trading_plan_id로 조회
+      // trading_id가 있으면 trading_id로 조회, order_no가 있으면 order_no로 조회, 없으면 trading_plan_id로 조회
       let url
-      if (orderNo) {
+      if (tradingId) {
+        url = `/api/recap/by-trading/${tradingId}`
+      } else if (orderNo) {
         url = `/api/recap/by-order/${orderNo}`
       } else if (tradingPlanId) {
         url = `/api/recap/${tradingPlanId}`
@@ -103,14 +107,17 @@ export default function RecapModal({
         return null
       }
 
+      console.log('[RecapModal] 복기 데이터 요청:', url)
       const response = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
       if (response.status === 404) return null
       if (!response.ok) throw new Error('복기 데이터 조회 실패')
-      return response.json()
+      const data = await response.json()
+      console.log('[RecapModal] 기존 복기 데이터 조회:', data)
+      return data
     },
-    enabled: isOpen && (!!orderNo || !!tradingPlanId),
+    enabled: isOpen && (!!tradingId || !!orderNo || !!tradingPlanId),
   })
 
   // 일봉 차트 데이터 조회
@@ -231,6 +238,7 @@ export default function RecapModal({
     mutationFn: async (data: RecapData) => {
       const token = Cookies.get('access_token') || localStorage.getItem('access_token')
       console.log('Token found:', !!token, token?.substring(0, 20) + '...')
+      console.log('Trading ID:', tradingId)
       console.log('Trading Plan ID:', tradingPlanId)
       console.log('Order No:', orderNo)
       if (!token) {
@@ -243,6 +251,7 @@ export default function RecapModal({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
+          trading_id: tradingId || null,
           trading_plan_id: tradingPlanId || null,
           order_no: orderNo || null,
           ...data,
@@ -257,7 +266,7 @@ export default function RecapModal({
     },
     onSuccess: () => {
       toast.success('복기가 저장되었습니다')
-      queryClient.invalidateQueries({ queryKey: ['recap', tradingPlanId] })
+      queryClient.invalidateQueries({ queryKey: ['recap', tradingId || tradingPlanId] })
       queryClient.invalidateQueries({ queryKey: ['recentTrades'] })
       onClose()
     },
@@ -272,9 +281,11 @@ export default function RecapModal({
     mutationFn: async (data: RecapData) => {
       const token = Cookies.get('access_token') || localStorage.getItem('access_token')
 
-      // order_no가 있으면 order_no 기반으로 수정, 없으면 trading_plan_id 기반으로 수정
+      // trading_id가 있으면 trading_id 기반으로, order_no가 있으면 order_no 기반으로, 없으면 trading_plan_id 기반으로 수정
       let url
-      if (orderNo) {
+      if (tradingId) {
+        url = `/api/recap/by-trading/${tradingId}`
+      } else if (orderNo) {
         url = `/api/recap/by-order/${orderNo}`
       } else if (tradingPlanId) {
         url = `/api/recap/${tradingPlanId}`
@@ -393,6 +404,17 @@ export default function RecapModal({
       })
     }
   }, [chartData])
+
+  // 거래 데이터 로깅
+  useEffect(() => {
+    console.log('[RecapModal DEBUG] tradesData:', {
+      loaded: !!tradesData,
+      length: tradesData?.length || 0,
+      data: tradesData,
+      loading: tradesLoading,
+      error: tradesError,
+    })
+  }, [tradesData, tradesLoading, tradesError])
 
   if (!isOpen) return null
 

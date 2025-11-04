@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import Optional, List
 from app.database import get_db
-from app.models import Trading, User
-from app.schemas import Trading as TradingSchema, TradingCreate, SyncDashboardTradesRequest
+from app.models import TradingHistory, User, TradingStock
+from app.schemas import Trading as TradingSchema, TradingCreate
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/api/trading", tags=["trading"])
@@ -17,7 +17,7 @@ def create_trading(
     current_user: User = Depends(get_current_user)
 ):
     """매매 기록 생성"""
-    db_trading = Trading(
+    db_trading = TradingHistory(
         user_id=current_user.id,
         executed_at=trading.executed_at,
         trade_type=trading.trade_type,
@@ -70,10 +70,10 @@ def get_stock_trades(
     """
     try:
         # 현재 사용자의 해당 종목 거래 기록 조회
-        query = db.query(Trading).filter(
-            Trading.user_id == current_user.id,
-            Trading.stock_code == stock_code
-        ).order_by(Trading.executed_at.desc())
+        query = db.query(TradingHistory).filter(
+            TradingHistory.user_id == current_user.id,
+            TradingHistory.stock_code == stock_code
+        ).order_by(TradingHistory.executed_at.desc())
 
         total_records = query.count()
         trades = query.offset(offset).limit(limit).all()
@@ -86,7 +86,8 @@ def get_stock_trades(
 
             # datetime을 YYYYMMDDHHmmss 형식으로 변환
             datetime_str = trade.executed_at.strftime('%Y%m%d%H%M%S')
-            date_str = trade.executed_at.strftime('%Y-%m-%d')
+            # date를 YYYYMMDD 형식으로 변환 (차트에서 날짜 매칭을 위해)
+            date_str = trade.executed_at.strftime('%Y%m%d')
 
             result_trades.append({
                 'date': date_str,
@@ -137,19 +138,19 @@ def get_trading_records(
     - start_date: 필터 - 시작 날짜
     - end_date: 필터 - 종료 날짜
     """
-    query = db.query(Trading).filter(Trading.user_id == current_user.id)
+    query = db.query(TradingHistory).filter(TradingHistory.user_id == current_user.id)
 
     if trade_type:
-        query = query.filter(Trading.trade_type == trade_type)
+        query = query.filter(TradingHistory.trade_type == trade_type)
     if stock_code:
-        query = query.filter(Trading.stock_code == stock_code)
+        query = query.filter(TradingHistory.stock_code == stock_code)
     if start_date:
-        query = query.filter(Trading.executed_at >= start_date)
+        query = query.filter(TradingHistory.executed_at >= start_date)
     if end_date:
-        query = query.filter(Trading.executed_at <= end_date)
+        query = query.filter(TradingHistory.executed_at <= end_date)
 
     # 최신순으로 정렬
-    records = query.order_by(Trading.executed_at.desc()).offset(offset).limit(limit).all()
+    records = query.order_by(TradingHistory.executed_at.desc()).offset(offset).limit(limit).all()
     return records
 
 
@@ -160,9 +161,9 @@ def get_trading_record(
     current_user: User = Depends(get_current_user)
 ):
     """특정 매매 기록 조회"""
-    trading = db.query(Trading).filter(
-        Trading.id == trading_id,
-        Trading.user_id == current_user.id
+    trading = db.query(TradingHistory).filter(
+        TradingHistory.id == trading_id,
+        TradingHistory.user_id == current_user.id
     ).first()
 
     if not trading:
@@ -179,9 +180,9 @@ def update_trading_record(
     current_user: User = Depends(get_current_user)
 ):
     """매매 기록 수정"""
-    db_trading = db.query(Trading).filter(
-        Trading.id == trading_id,
-        Trading.user_id == current_user.id
+    db_trading = db.query(TradingHistory).filter(
+        TradingHistory.id == trading_id,
+        TradingHistory.user_id == current_user.id
     ).first()
 
     if not db_trading:
@@ -210,9 +211,9 @@ def delete_trading_record(
     current_user: User = Depends(get_current_user)
 ):
     """매매 기록 삭제"""
-    trading = db.query(Trading).filter(
-        Trading.id == trading_id,
-        Trading.user_id == current_user.id
+    trading = db.query(TradingHistory).filter(
+        TradingHistory.id == trading_id,
+        TradingHistory.user_id == current_user.id
     ).first()
 
     if not trading:
@@ -237,12 +238,12 @@ def get_trading_summary(
     - 총 매수/매도 거래 수
     - 총 거래 금액
     """
-    query = db.query(Trading).filter(Trading.user_id == current_user.id)
+    query = db.query(TradingHistory).filter(TradingHistory.user_id == current_user.id)
 
     if start_date:
-        query = query.filter(Trading.executed_at >= start_date)
+        query = query.filter(TradingHistory.executed_at >= start_date)
     if end_date:
-        query = query.filter(Trading.executed_at <= end_date)
+        query = query.filter(TradingHistory.executed_at <= end_date)
 
     records = query.all()
 
@@ -259,166 +260,72 @@ def get_trading_summary(
     }
 
 
-@router.post("/sync-dashboard-trades")
-async def sync_dashboard_trades(
-    request: SyncDashboardTradesRequest,
+@router.post("/sync-stocks")
+def sync_traded_stocks(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    대시보드에 표시된 종목들의 거래 기록을 조회하여 Trading 테이블에 추가
-    - 이미 존재하는 기록(order_no 기반)은 제외하고 새로운 기록만 추가
-
-    Args:
-        stock_codes: 종목코드 리스트 (예: ['005930', '000660'])
-
-    Returns:
-        {
-            "status": "success",
-            "message": "3건의 새로운 거래 기록이 추가되었습니다.",
-            "synced_count": 3,
-            "duplicate_count": 2,
-            "failed_count": 0
-        }
+    매매 기록에 있는 종목들을 trading_stocks 테이블에 동기화
+    중복된 종목은 is_downloaded 상태만 유지
     """
-    import os
-    from dotenv import load_dotenv
-
     try:
-        # .env 파일 경로 설정
-        analyze_env_path = os.path.join(os.path.dirname(__file__), '../../../analyze/.env')
-        load_dotenv(analyze_env_path)
+        # 현재 사용자의 모든 거래 기록에서 고유한 종목 조회
+        trades = db.query(TradingHistory).filter(
+            TradingHistory.user_id == current_user.id
+        ).all()
 
-        # KiwoomAPI를 통해 종목별 거래 기록 조회
-        from lib.kiwoom import KiwoomAPI
+        # 고유한 종목 추출 (stock_code 기준)
+        unique_stocks = {}
+        for trade in trades:
+            if trade.stock_code not in unique_stocks:
+                unique_stocks[trade.stock_code] = {
+                    'stock_code': trade.stock_code,
+                    'stock_name': trade.stock_name
+                }
 
-        app_key = os.getenv('KIWOOM_APP_KEY')
-        secret_key = os.getenv('KIWOOM_SECRET_KEY')
-        account_no = os.getenv('KIWOOM_ACCOUNT_NO')
+        # trading_stocks 테이블에 업데이트
+        added_count = 0
+        updated_count = 0
 
-        if not all([app_key, secret_key, account_no]):
-            return {
-                "status": "warning",
-                "message": "키움증권 API 설정이 완료되지 않았습니다",
-                "synced_count": 0,
-                "duplicate_count": 0,
-                "failed_count": len(request.stock_codes)
-            }
+        for stock_code, stock_info in unique_stocks.items():
+            # 기존 종목 확인
+            existing_stock = db.query(TradingStock).filter(
+                TradingStock.stock_code == stock_code
+            ).first()
 
-        api = KiwoomAPI(
-            app_key=app_key,
-            secret_key=secret_key,
-            account_no=account_no,
-            use_mock=False
-        )
+            if existing_stock:
+                # 기존 종목 - stock_name 업데이트 (is_downloaded는 유지)
+                existing_stock.stock_name = stock_info['stock_name']
+                existing_stock.updated_at = datetime.utcnow()
+                updated_count += 1
+            else:
+                # 신규 종목 추가
+                new_stock = TradingStock(
+                    stock_name=stock_info['stock_name'],
+                    stock_code=stock_code,
+                    is_downloaded=False
+                )
+                db.add(new_stock)
+                added_count += 1
 
-        # 최근 거래 기록 조회 (90일)
-        all_trades = api.get_recent_trades(days=90)
-
-        # 기존 거래 기록 조회 (중복 체크용)
-        existing_order_nos = set(
-            record.order_no for record in
-            db.query(Trading).filter(Trading.user_id == current_user.id).all()
-            if record.order_no
-        )
-
-        synced_count = 0
-        duplicate_count = 0
-        failed_count = 0
-
-        # 각 종목별로 거래 기록 처리
-        for stock_code in request.stock_codes:
-            try:
-                # 해당 종목의 거래 필터링
-                stock_trades = [
-                    trade for trade in all_trades
-                    if trade['stock_code'] == stock_code
-                ]
-
-                for trade in stock_trades:
-                    # order_no 기반 중복 체크
-                    if trade['order_no'] and trade['order_no'] in existing_order_nos:
-                        duplicate_count += 1
-                        continue
-
-                    # 거래 기록 생성
-                    try:
-                        # datetime 형식 변환 (YYYYMMDDHHmmss -> datetime)
-                        datetime_str = trade['datetime']
-                        if isinstance(datetime_str, str) and len(datetime_str) == 14:
-                            from datetime import datetime as dt
-                            executed_at = dt.strptime(datetime_str, '%Y%m%d%H%M%S')
-                        else:
-                            executed_at = trade.get('executed_at', datetime.utcnow())
-
-                        # trade_type 변환
-                        trade_type = 'buy' if trade['trade_type'] == '매수' else 'sell'
-
-                        # executed_amount 계산
-                        executed_amount = trade.get('executed_amount', trade['price'] * trade['quantity'])
-
-                        # Trading 레코드 생성
-                        new_trading = Trading(
-                            user_id=current_user.id,
-                            executed_at=executed_at,
-                            trade_type=trade_type,
-                            order_no=trade.get('order_no'),
-                            stock_name=trade['stock_name'],
-                            stock_code=stock_code,
-                            executed_price=trade['price'],
-                            executed_quantity=trade['quantity'],
-                            executed_amount=executed_amount,
-                            broker='kiwoom'
-                        )
-
-                        db.add(new_trading)
-                        synced_count += 1
-
-                        # order_no가 있으면 기록
-                        if trade['order_no']:
-                            existing_order_nos.add(trade['order_no'])
-
-                    except Exception as e:
-                        print(f"❌ 거래 기록 생성 실패 (주문번호: {trade.get('order_no')}): {e}")
-                        failed_count += 1
-                        continue
-
-            except Exception as e:
-                print(f"❌ 종목 {stock_code} 거래 기록 조회 실패: {e}")
-                failed_count += 1
-                continue
-
-        # 데이터베이스에 커밋
         db.commit()
 
-        print(f"✅ 거래 기록 동기화 완료 - 추가: {synced_count}건, 중복: {duplicate_count}건, 실패: {failed_count}건")
+        print(f"✅ 매매 종목 동기화 완료: {added_count}건 추가, {updated_count}건 업데이트 (사용자: {current_user.id})")
 
         return {
-            "status": "success",
-            "message": f"{synced_count}건의 새로운 거래 기록이 추가되었습니다.",
-            "synced_count": synced_count,
-            "duplicate_count": duplicate_count,
-            "failed_count": failed_count
+            "message": "종목 동기화 완료",
+            "added": added_count,
+            "updated": updated_count,
+            "total": len(unique_stocks)
         }
 
-    except ImportError as e:
-        print(f"❌ 키움증권 API 모듈 import 오류: {e}")
-        return {
-            "status": "error",
-            "message": f"키움증권 API 모듈을 불러올 수 없습니다: {str(e)}",
-            "synced_count": 0,
-            "duplicate_count": 0,
-            "failed_count": len(request.stock_codes)
-        }
     except Exception as e:
-        print(f"❌ 거래 기록 동기화 중 오류: {e}")
+        print(f"❌ 종목 동기화 중 오류: {e}")
         import traceback
         traceback.print_exc()
-        db.rollback()
-        return {
-            "status": "error",
-            "message": f"거래 기록 동기화 중 오류가 발생했습니다: {str(e)}",
-            "synced_count": 0,
-            "duplicate_count": 0,
-            "failed_count": len(request.stock_codes)
-        }
+        raise HTTPException(
+            status_code=500,
+            detail=f"종목 동기화 중 오류가 발생했습니다: {str(e)}"
+        )
+

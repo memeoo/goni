@@ -64,8 +64,19 @@ class TradingPlan(Base):
     recap = relationship("Recap", back_populates="trading_plan", uselist=False)
 
 
-class Trading(Base):
-    __tablename__ = "trading"
+class TradingStock(Base):
+    __tablename__ = "trading_stocks"
+
+    id = sa.Column(sa.Integer, primary_key=True, index=True)
+    stock_name = sa.Column(sa.String, nullable=False)  # 종목명
+    stock_code = sa.Column(sa.String, unique=True, nullable=False, index=True)  # 종목코드
+    is_downloaded = sa.Column(sa.Boolean, default=False)  # 다운로드 여부
+    created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
+    updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class TradingHistory(Base):
+    __tablename__ = "trading_history"
 
     id = sa.Column(sa.Integer, primary_key=True, index=True)
     user_id = sa.Column(sa.Integer, sa.ForeignKey("users.id"), nullable=False, index=True)
@@ -99,7 +110,8 @@ class Recap(Base):
 
     id = sa.Column(sa.Integer, primary_key=True, index=True)
     user_id = sa.Column(sa.Integer, sa.ForeignKey("users.id"), nullable=False)
-    trading_plan_id = sa.Column(sa.Integer, sa.ForeignKey("trading_plans.id"), nullable=True)  # nullable로 변경
+    trading_plan_id = sa.Column(sa.Integer, sa.ForeignKey("trading_plans.id"), nullable=True)  # 계획 기반 복기
+    trading_id = sa.Column(sa.Integer, sa.ForeignKey("trading_history.id"), nullable=True)  # TradingHistory 테이블과의 연결
     order_no = sa.Column(sa.String, index=True)  # 주문번호 (한투 API)
 
     # 매매 이유 항목들
@@ -118,3 +130,4 @@ class Recap(Base):
 
     user = relationship("User")
     trading_plan = relationship("TradingPlan", back_populates="recap")
+    trading = relationship("TradingHistory")

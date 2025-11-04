@@ -30,16 +30,23 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // 401 Unauthorized: 토큰 만료 또는 검증 실패
     if (error.response?.status === 401) {
       // Clear tokens from both storage methods
       Cookies.remove('access_token')
       localStorage.removeItem('access_token')
-      
+
       // Only redirect if we're in a browser environment
       if (typeof window !== 'undefined') {
         window.location.href = '/login'
       }
     }
+
+    // CORS 에러가 아니거나 기타 네트워크 에러인 경우 로그 출력
+    if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+      console.warn('[API] 네트워크 연결 오류 - 서버 상태를 확인하세요')
+    }
+
     return Promise.reject(error)
   }
 )
@@ -105,11 +112,18 @@ export const tradingPlansAPI = {
     api.delete(`/api/trading-plans/${planId}`),
   getRecentTrades: (limit = 20) =>
     api.get(`/api/trading-plans/trades/recent?limit=${limit}`),
-  syncRecentTrades: (limit = 20) =>
-    api.post(`/api/trading-plans/trades/sync?limit=${limit}`),
 }
 
 export const tradingAPI = {
-  syncDashboardTrades: (stockCodes: string[]) =>
-    api.post('/api/trading/sync-dashboard-trades', { stock_codes: stockCodes }),
+  getRecentTrades: (limit = 100) =>
+    api.get(`/api/trading?limit=${limit}`),
+  syncTradedStocks: () =>
+    api.post('/api/trading/sync-stocks'),
+}
+
+export const tradingStocksAPI = {
+  getTradingStocks: (skip = 0, limit = 100) =>
+    api.get(`/api/trading-stocks?skip=${skip}&limit=${limit}`),
+  syncFromKiwoom: (days = 5) =>
+    api.post(`/api/trading-stocks/sync-from-kiwoom?days=${days}`),
 }
