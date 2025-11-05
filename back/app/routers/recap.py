@@ -11,6 +11,88 @@ router = APIRouter(
 )
 
 
+# ===== GET 메서드 (읽기) - 가장 구체적인 경로부터 정의 =====
+
+@router.get("/by-trading/{trading_id}", response_model=schemas.Recap)
+def get_recap_by_trading(
+    trading_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """trading_id로 복기 조회"""
+    recap = db.query(models.Recap).filter(
+        models.Recap.trading_id == trading_id,
+        models.Recap.user_id == current_user.id
+    ).first()
+
+    if not recap:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Recap not found"
+        )
+
+    return recap
+
+
+@router.get("/by-order/{order_no}", response_model=schemas.Recap)
+def get_recap_by_order(
+    order_no: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """order_no로 복기 조회"""
+    recap = db.query(models.Recap).filter(
+        models.Recap.order_no == order_no,
+        models.Recap.user_id == current_user.id
+    ).first()
+
+    if not recap:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Recap not found"
+        )
+
+    return recap
+
+
+@router.get("/{trading_plan_id}", response_model=schemas.Recap)
+def get_recap(
+    trading_plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """특정 trading plan의 복기 조회"""
+    recap = db.query(models.Recap).filter(
+        models.Recap.trading_plan_id == trading_plan_id,
+        models.Recap.user_id == current_user.id
+    ).first()
+
+    if not recap:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Recap not found"
+        )
+
+    return recap
+
+
+@router.get("/", response_model=List[schemas.Recap])
+def get_my_recaps(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """현재 유저의 모든 복기 조회"""
+    recaps = db.query(models.Recap).filter(
+        models.Recap.user_id == current_user.id
+    ).offset(skip).limit(limit).all()
+
+    return recaps
+
+
+# ===== POST 메서드 (생성) =====
+
 @router.post("", response_model=schemas.Recap)
 @router.post("/", response_model=schemas.Recap)
 def create_recap(
@@ -139,68 +221,7 @@ def create_recap(
     return db_recap
 
 
-@router.get("/by-trading/{trading_id}", response_model=schemas.Recap)
-def get_recap_by_trading(
-    trading_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    """trading_id로 복기 조회"""
-    recap = db.query(models.Recap).filter(
-        models.Recap.trading_id == trading_id,
-        models.Recap.user_id == current_user.id
-    ).first()
-
-    if not recap:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Recap not found"
-        )
-
-    return recap
-
-
-@router.get("/by-order/{order_no}", response_model=schemas.Recap)
-def get_recap_by_order(
-    order_no: str,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    """order_no로 복기 조회"""
-    recap = db.query(models.Recap).filter(
-        models.Recap.order_no == order_no,
-        models.Recap.user_id == current_user.id
-    ).first()
-
-    if not recap:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Recap not found"
-        )
-
-    return recap
-
-
-@router.get("/{trading_plan_id}", response_model=schemas.Recap)
-def get_recap(
-    trading_plan_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    """특정 trading plan의 복기 조회"""
-    recap = db.query(models.Recap).filter(
-        models.Recap.trading_plan_id == trading_plan_id,
-        models.Recap.user_id == current_user.id
-    ).first()
-
-    if not recap:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Recap not found"
-        )
-
-    return recap
-
+# ===== PUT 메서드 (수정) - 가장 구체적인 경로부터 정의 =====
 
 @router.put("/by-trading/{trading_id}", response_model=schemas.Recap)
 def update_recap_by_trading(
@@ -292,6 +313,8 @@ def update_recap(
     return recap
 
 
+# ===== DELETE 메서드 =====
+
 @router.delete("/{trading_plan_id}")
 def delete_recap(
     trading_plan_id: int,
@@ -314,18 +337,3 @@ def delete_recap(
     db.commit()
 
     return {"message": "Recap deleted successfully"}
-
-
-@router.get("/", response_model=List[schemas.Recap])
-def get_my_recaps(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    """현재 유저의 모든 복기 조회"""
-    recaps = db.query(models.Recap).filter(
-        models.Recap.user_id == current_user.id
-    ).offset(skip).limit(limit).all()
-
-    return recaps

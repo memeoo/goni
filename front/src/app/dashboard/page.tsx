@@ -5,17 +5,17 @@ import { useQuery } from '@tanstack/react-query'
 import { tradingAPI, tradingStocksAPI } from '@/lib/api'
 import Header from '@/components/header'
 import PlanStockCard from '@/components/plan-stock-card'
-import TradeCard from '@/components/trade-card'
+import RecapStockCard from '@/components/recap-stock-card'
 import RecapModal from '@/components/recap-modal'
 
 // 매매 종목 조회 함수 (trading_stocks 테이블에서 조회)
 const fetchTradingStocks = async () => {
   const response = await tradingStocksAPI.getTradingStocks(0, 100)
 
-  // 응답 데이터 형식에 따라 처리
-  const stocksData = response.data || (Array.isArray(response) ? response : [])
+  // axios 응답 처리: response.data = { data: [...], total: ..., ... }
+  const stocks = response.data?.data || []
 
-  return stocksData.map((stock: any) => ({
+  return stocks.map((stock: any) => ({
     id: stock.id,
     stock_code: stock.stock_code,
     stock_name: stock.stock_name,
@@ -23,23 +23,18 @@ const fetchTradingStocks = async () => {
   }))
 }
 
-// 실제 매매 내역 조회 함수 (Trading DB에서 조회)
+// 복기 모드용 종목 조회 함수 (trading_stocks 테이블에서 조회)
 const fetchRecentTrades = async () => {
-  const response = await tradingAPI.getRecentTrades(100)
+  const response = await tradingStocksAPI.getTradingStocks(0, 100)
 
-  // Trading API 응답을 TradeCard 형식으로 변환
-  const trades = Array.isArray(response) ? response : response.data || []
+  // axios 응답 처리: response.data = { data: [...], total: ..., ... }
+  const stocks = response.data?.data || []
 
-  return trades.map((trade: any) => ({
-    id: trade.id,
-    stock_code: trade.stock_code,
-    stock_name: trade.stock_name,
-    trade_type: trade.trade_type === 'buy' ? '매수' : '매도', // 'buy'/'sell' -> '매수'/'매도'
-    price: trade.executed_price,
-    quantity: trade.executed_quantity,
-    datetime: trade.executed_at, // ISO 형식
-    order_no: trade.order_no,
-    has_recap: false, // TODO: 복기 여부 확인 로직 추가
+  return stocks.map((stock: any) => ({
+    id: stock.id,
+    stock_code: stock.stock_code,
+    stock_name: stock.stock_name,
+    is_downloaded: stock.is_downloaded,
   }))
 }
 
@@ -138,65 +133,43 @@ export default function DashboardPage() {
     console.log('전략 관리')
   }
 
-  const handleStockCardClick = (tradeId: number) => {
+  const handleStockCardClick = (stock: any) => {
     if (mode === 'review') {
       // 복기 모드에서는 모달 열기
       // trading_id를 기반으로 거래 기록과 매핑
       setSelectedTradingPlanId(null)
-      setSelectedTradingId(tradeId)
+      setSelectedTradingId(stock.id)
       setSelectedOrderNo(undefined)
+      setSelectedStockName(stock.stock_name)
+      setSelectedStockCode(stock.stock_code)
       setIsModalOpen(true)
     } else {
       // 계획 모드에서는 아직 미구현
-      console.log(`카드 클릭: ${tradeId}`)
+      console.log(`카드 클릭: ${stock.id}`)
     }
   }
 
-  // 복기 모드에서 종목별 최신 거래만 필터링
-  const getLatestTradesByStock = (trades: any[]) => {
-    const tradeMap = new Map<string, any>()
-
-    // 각 종목의 가장 최신 거래만 유지
-    for (const trade of trades) {
-      const stockCode = trade.stock_code
-      if (!tradeMap.has(stockCode)) {
-        tradeMap.set(stockCode, trade)
-      }
-    }
-
-    // Map을 배열로 변환하고 최신순 정렬
-    return Array.from(tradeMap.values()).sort((a, b) => {
-      try {
-        const aTime = a.datetime ? new Date(a.datetime).getTime() : 0
-        const bTime = b.datetime ? new Date(b.datetime).getTime() : 0
-        return bTime - aTime
-      } catch (e) {
-        console.warn('[getLatestTradesByStock] Error parsing date:', a.datetime, b.datetime)
-        return 0
-      }
-    })
-  }
 
   // Create empty slots to fill grid to at least 8 items (2 rows × 4 columns)
   const createGridItems = (items: any[], mode: Mode) => {
     const minItems = 8
-    const gridItems = mode === 'review' ? getLatestTradesByStock(items) : [...items]
+    const gridItems = [...items]
 
     while (gridItems.length < minItems) {
       gridItems.push(null)
     }
 
     return gridItems.map((item, index) => (
-      <div key={item?.id || item?.order_no || `empty-${index}`}>
+      <div key={item?.id || `empty-${index}`}>
         {mode === 'plan' ? (
           <PlanStockCard
             stock={item}
             onClick={item ? () => handleStockCardClick(item.id) : undefined}
           />
         ) : (
-          <TradeCard
-            trade={item}
-            onClick={item && item.id ? handleStockCardClick : undefined}
+          <RecapStockCard
+            stock={item}
+            onClick={item ? handleStockCardClick : undefined}
           />
         )}
       </div>

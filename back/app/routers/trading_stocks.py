@@ -163,6 +163,7 @@ def sync_trading_stocks_from_kiwoom(
         )
 
 
+@router.get("")
 @router.get("/")
 def get_trading_stocks(
     db: Session = Depends(get_db),

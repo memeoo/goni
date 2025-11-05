@@ -89,8 +89,8 @@ export default function RecapModal({
   const volumeRef = useRef<HTMLTextAreaElement>(null)
   const formContainerRef = useRef<HTMLDivElement>(null)
 
-  // 기존 복기 데이터 조회
-  const { data: existingRecap, isLoading: recapLoading } = useQuery({
+  // 기존 복기 데이터 조회는 폼이 표시될 때만 (B/S 마커 클릭 후)
+  const { data: existingRecap } = useQuery({
     queryKey: ['recap', tradingId || orderNo || tradingPlanId],
     queryFn: async () => {
       const token = Cookies.get('access_token') || localStorage.getItem('access_token')
@@ -107,17 +107,19 @@ export default function RecapModal({
         return null
       }
 
-      console.log('[RecapModal] 복기 데이터 요청:', url)
       const response = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
-      if (response.status === 404) return null
+      if (response.status === 404) {
+        return null // 복기가 없으면 null 반환
+      }
       if (!response.ok) throw new Error('복기 데이터 조회 실패')
       const data = await response.json()
-      console.log('[RecapModal] 기존 복기 데이터 조회:', data)
       return data
     },
-    enabled: isOpen && (!!tradingId || !!orderNo || !!tradingPlanId),
+    // 폼이 표시될 때만 복기 데이터 조회 (B/S 마커 클릭 후)
+    enabled: isOpen && showFormInputs && (!!tradingId || !!orderNo || !!tradingPlanId),
+    retry: false, // 404도 재시도하지 않음
   })
 
   // 일봉 차트 데이터 조회
@@ -150,8 +152,8 @@ export default function RecapModal({
     retry: 1, // 1회만 재시도
   })
 
-  // 매매 기록 조회 (Trading 테이블에서)
-  const { data: tradesData, isLoading: tradesLoading, error: tradesError } = useQuery({
+  // 매매 기록 조회 (Trading 테이블에서 - 해당 종목의 모든 거래 내역)
+  const { data: tradesData } = useQuery({
     queryKey: ['stockTrades', stockCode],
     queryFn: async () => {
       if (!stockCode) return null
@@ -159,23 +161,15 @@ export default function RecapModal({
       try {
         const token = Cookies.get('access_token') || localStorage.getItem('access_token')
         const url = `/api/trading/${stockCode}/trades`
-        console.log('[RecapModal] 매매 기록 요청 (Trading DB):', url)
         const response = await fetch(url, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         })
         if (!response.ok) {
-          console.warn(`[RecapModal] 매매 기록 조회 실패: ${response.status}`)
           return null
         }
         const result = await response.json()
-        console.log('[RecapModal] 매매 기록 수신:', {
-          stockCode,
-          totalRecords: result.total_records,
-          trades: result.trades,
-        })
         return result.trades || []
       } catch (error) {
-        console.warn('[RecapModal] 매매 기록 조회 중 오류:', error)
         return null
       }
     },
@@ -197,7 +191,7 @@ export default function RecapModal({
         evaluation_reason: existingRecap.evaluation_reason || '',
         etc: existingRecap.etc || '',
       })
-    } else if (!recapLoading) {
+    } else {
       // 기존 복기가 없으면 폼 초기화
       setFormData({
         catalyst: '',
@@ -211,7 +205,7 @@ export default function RecapModal({
         etc: '',
       })
     }
-  }, [existingRecap, recapLoading])
+  }, [existingRecap])
 
   // 모달이 닫힐 때 폼 초기화
   useEffect(() => {
@@ -405,16 +399,6 @@ export default function RecapModal({
     }
   }, [chartData])
 
-  // 거래 데이터 로깅
-  useEffect(() => {
-    console.log('[RecapModal DEBUG] tradesData:', {
-      loaded: !!tradesData,
-      length: tradesData?.length || 0,
-      data: tradesData,
-      loading: tradesLoading,
-      error: tradesError,
-    })
-  }, [tradesData, tradesLoading, tradesError])
 
   if (!isOpen) return null
 
@@ -495,30 +479,28 @@ export default function RecapModal({
         </div>
 
         {/* Content */}
-        {recapLoading ? (
-          <div className="p-6 text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">로딩 중...</p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="p-4">
-            {/* 일봉 차트 */}
-            {chartLoading ? (
-              <div className="mb-4 text-center py-6 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-2 text-gray-600 text-sm">차트 로딩 중...</p>
-              </div>
-            ) : chartData && chartData.length > 0 ? (
-              <div className="mb-6 border-b pb-4">
-                <DailyChart
-                  stockCode={stockCode || ''}
-                  data={chartData}
-                  trades={tradesData}
-                  onHoveredIndexChange={setHoveredIndex}
-                  onMarkerClick={handleMarkerClick}
-                />
-              </div>
-            ) : null}
+        <form onSubmit={handleSubmit} className="p-4">
+          {/* 일봉 차트 */}
+          {chartLoading ? (
+            <div className="mb-4 text-center py-6 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-2 text-gray-600 text-sm">차트 로딩 중...</p>
+            </div>
+          ) : chartData && chartData.length > 0 ? (
+            <div className="mb-6 border-b pb-4">
+              <DailyChart
+                stockCode={stockCode || ''}
+                data={chartData}
+                trades={tradesData}
+                onHoveredIndexChange={setHoveredIndex}
+                onMarkerClick={handleMarkerClick}
+              />
+            </div>
+          ) : (
+            <div className="mb-4 text-center py-6 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-gray-600 text-sm">차트 데이터를 불러올 수 없습니다</p>
+            </div>
+          )}
 
             {/* 폼 입력 섹션 - Buy/Sell 아이콘 클릭 후에만 표시 */}
             {showFormInputs && (
@@ -711,7 +693,6 @@ export default function RecapModal({
               </button>
             </div>
           </form>
-        )}
       </div>
     </div>
   )

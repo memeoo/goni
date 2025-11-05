@@ -302,9 +302,9 @@ export default function DailyChart({ stockCode, data, trades, onHoveredIndexChan
           const priceY = padding.top + chartHeight * (1 - (trade.price - priceMin) / priceRange)
 
           // 거래 유형에 따른 색상 결정
-          const isLongTrade = trade.trade_type === '매수'
-          const markerColor = isLongTrade ? '#ff4444' : '#4444ff' // 매수: 빨강, 매도: 파랑
-          const label = isLongTrade ? 'B' : 'S'
+          const isBuy = trade.trade_type === '매수'
+          const markerColor = isBuy ? '#ff4444' : '#4444ff' // 매수: 빨강, 매도: 파랑
+          const label = isBuy ? 'B' : 'S'
 
           // 텍스트 위치 (봉의 왼쪽에 배치 - 더 왼쪽으로)
           const textX = candleX - candleWidth * 0.65

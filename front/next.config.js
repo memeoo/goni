@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    // Use BACKEND_URL for server-side rewrites, fallback to localhost for development
+    const apiUrl = process.env.BACKEND_URL || 'http://localhost:8000'
     return [
       {
         source: '/api/:path*',

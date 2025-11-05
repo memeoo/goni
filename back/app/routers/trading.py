@@ -35,6 +35,7 @@ def create_trading(
     return db_trading
 
 
+@router.get("/{stock_code}/trades/")
 @router.get("/{stock_code}/trades")
 def get_stock_trades(
     stock_code: str,
@@ -81,8 +82,15 @@ def get_stock_trades(
         # 응답 데이터 포맷 변환
         result_trades = []
         for trade in trades:
-            # trade_type 변환: 'buy' -> '매수', 'sell' -> '매도'
-            trade_type_display = '매수' if trade.trade_type == 'buy' else '매도'
+            # trade_type은 이미 한글로 저장되어 있음 ('매수' 또는 '매도')
+            # DB에서 직접 'buy'/'sell'로 저장된 경우를 위한 폴백 처리
+            if trade.trade_type in ('buy', 'buy_'):
+                trade_type_display = '매수'
+            elif trade.trade_type in ('sell', 'sell_'):
+                trade_type_display = '매도'
+            else:
+                # 이미 한글로 저장된 경우
+                trade_type_display = trade.trade_type
 
             # datetime을 YYYYMMDDHHmmss 형식으로 변환
             datetime_str = trade.executed_at.strftime('%Y%m%d%H%M%S')
@@ -116,6 +124,7 @@ def get_stock_trades(
         )
 
 
+@router.get("", response_model=List[TradingSchema])
 @router.get("/", response_model=List[TradingSchema])
 def get_trading_records(
     db: Session = Depends(get_db),

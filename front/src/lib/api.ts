@@ -1,7 +1,11 @@
 import axios from 'axios'
 import Cookies from 'js-cookie'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+// Use relative path for client-side requests to avoid CORS issues
+// This way requests go to the same origin (whether localhost or production IP)
+const API_BASE_URL = typeof window !== 'undefined'
+  ? '' // Empty means relative to current origin
+  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') // Server-side defaults to explicit URL
 
 const api = axios.create({
   baseURL: API_BASE_URL,

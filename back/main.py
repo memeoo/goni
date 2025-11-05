@@ -44,7 +44,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 app.include_router(stocks.router, prefix="/api/stocks", tags=["stocks"])
 app.include_router(trading_plans.router, prefix="/api/trading-plans", tags=["trading-plans"])
 app.include_router(trading.router, tags=["trading"])
-app.include_router(trading_stocks.router, tags=["trading-stocks"])
+app.include_router(trading_stocks.router, tags=["trading-stocks"])  # trading_stocks.router 이미 /api/trading-stocks 포함
 app.include_router(recap.router)
 
 
