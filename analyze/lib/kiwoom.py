@@ -248,6 +248,110 @@ class KiwoomAPI:
         logger.info(f"일봉 차트 조회 성공: {stock_code} ({len(result.get('stk_dt_pole_chart_qry', []))}개 데이터)")
         return result
 
+    def get_account_evaluation(
+        self,
+        qry_tp: str = '0',
+        dmst_stex_tp: str = 'KRX'
+    ) -> Optional[Dict[str, Any]]:
+        """
+        계좌평가현황을 조회합니다 (kt00004 API).
+
+        Args:
+            qry_tp: 상장폐지조회구분
+                   '0': 전체 (기본값)
+                   '1': 상장폐지종목제외
+            dmst_stex_tp: 국내거래소구분
+                         'KRX': 한국거래소 (기본값)
+                         'NXT': 넥스트트레이드
+
+        Returns:
+            dict: 계좌평가현황 데이터
+            {
+                'acnt_nm': '김키움',              # 계좌명
+                'brch_nm': '키움은행',            # 지점명
+                'tot_est_amt': '342000000',      # 총평가금액
+                'aset_evlt_amt': '761950000',    # 자산평가금액
+                'tot_pur_amt': '2786000',        # 총매입금액
+                'tdy_lspft_amt': '1000000',      # 당일손익금액
+                'lspft_amt': '500000',           # 손익금액
+                'tdy_lspft_rt': '1.5',           # 당일손익율
+                'lspft_rt': '2.5',               # 손익율
+                'stk_acnt_evlt_prst': [          # 종목별 계좌평가현황
+                    {
+                        'stk_cd': 'A005930',        # 종목코드
+                        'stk_nm': '삼성전자',       # 종목명
+                        'rmnd_qty': '3',            # 잔량
+                        'avg_prc': '124500',        # 평균단가
+                        'cur_prc': '70000',         # 현재가
+                        'evlt_amt': '209542000',    # 평가금액
+                        'pl_amt': '-163958000',     # 손익금액
+                        'pl_rt': '-43.8977',        # 손익율
+                        'pur_amt': '373500000'      # 매입금액
+                    },
+                    ...
+                ],
+                'return_code': 0,
+                'return_msg': '조회가 완료되었습니다.'
+            }
+        """
+        endpoint = '/api/dostk/acnt'
+        api_id = 'kt00004'
+
+        data = {
+            'qry_tp': qry_tp,
+            'dmst_stex_tp': dmst_stex_tp,
+        }
+
+        result = self._make_request(endpoint, api_id, data)
+
+        if not result:
+            logger.error("계좌평가현황 조회 실패")
+            return None
+
+        # 응답 검증
+        if result.get('return_code') != 0:
+            logger.error(f"계좌평가현황 조회 오류: {result.get('return_msg', 'Unknown error')}")
+            return None
+
+        # 종목 정보 파싱
+        stocks = result.get('stk_acnt_evlt_prst', [])
+        logger.info(f"계좌평가현황 조회 성공: 총 {len(stocks)}개 보유종목")
+
+        for stock in stocks:
+            # 종목코드에서 'A' 접두사 제거
+            stock_cd = stock.get('stk_cd', '')
+            if stock_cd.startswith('A'):
+                stock['stk_cd'] = stock_cd[1:]
+
+            # 숫자 문자열을 숫자로 변환 (가독성 개선)
+            for field in ['rmnd_qty', 'avg_prc', 'cur_prc', 'evlt_amt', 'pl_amt', 'pur_amt']:
+                if field in stock:
+                    try:
+                        stock[field] = float(stock[field].strip() or '0')
+                    except (ValueError, AttributeError):
+                        stock[field] = 0
+
+            # 비율은 float로 변환
+            for field in ['pl_rt']:
+                if field in stock:
+                    try:
+                        stock[field] = float(stock[field].strip() or '0')
+                    except (ValueError, AttributeError):
+                        stock[field] = 0
+
+        # 계좌 정보의 숫자도 변환
+        account_fields = ['tot_est_amt', 'aset_evlt_amt', 'tot_pur_amt', 'prsm_dpst_aset_amt',
+                         'tdy_lspft_amt', 'lspft_amt', 'tdy_lspft_rt', 'lspft_rt']
+        for field in account_fields:
+            if field in result:
+                try:
+                    result[field] = float(result[field].strip() or '0')
+                except (ValueError, AttributeError):
+                    result[field] = 0
+
+        logger.debug(f"계좌평가현황: {json.dumps(result, indent=4, ensure_ascii=False)}")
+        return result
+
     def get_recent_trades(self, days: int = 5) -> List[Dict[str, Any]]:
         """
         최근 N일간의 매매(매수/매도) 데이터를 가져옵니다.
@@ -390,6 +494,29 @@ if __name__ == '__main__':
         print(json.dumps(result, indent=4, ensure_ascii=False))
     else:
         print("✗ 조회 실패")
+
+    # 계좌평가현황 조회 테스트 (kt00004)
+    print("\n" + "=" * 50)
+    print("계좌평가현황 조회 테스트 (kt00004)")
+    print("=" * 50)
+    account = api.get_account_evaluation()
+    if account:
+        print(f"✓ 조회 성공")
+        print(f"  계좌명: {account.get('acnt_nm')}")
+        print(f"  지점명: {account.get('brch_nm')}")
+        print(f"  총평가금액: {account.get('tot_est_amt'):,.0f}원")
+        print(f"  자산평가금액: {account.get('aset_evlt_amt'):,.0f}원")
+        print(f"  보유종목 수: {len(account.get('stk_acnt_evlt_prst', []))}")
+        print(f"\n  보유종목:")
+        for i, stock in enumerate(account.get('stk_acnt_evlt_prst', [])[:5], 1):  # 최근 5개만 출력
+            print(f"  {i}. {stock.get('stk_nm')}({stock.get('stk_cd')}) "
+                  f"수량: {stock.get('rmnd_qty'):.0f}주, "
+                  f"평가금액: {stock.get('evlt_amt'):,.0f}원, "
+                  f"손익율: {stock.get('pl_rt'):.2f}%")
+        if len(account.get('stk_acnt_evlt_prst', [])) > 5:
+            print(f"  ... 외 {len(account.get('stk_acnt_evlt_prst', [])) - 5}개")
+    else:
+        print("조회 실패")
 
     # 최근 5일 매매내역 조회 테스트
     print("\n" + "=" * 50)
