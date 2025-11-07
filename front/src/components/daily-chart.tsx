@@ -18,6 +18,7 @@ interface ChartDataPoint {
 }
 
 interface Trade {
+  id: number // TradingHistory ID (복기 생성 시 필요)
   date: string // YYYYMMDD format (e.g., '20251101') - will be converted to YYYY-MM-DD for chart matching
   price: number
   quantity: number

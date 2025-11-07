@@ -98,6 +98,7 @@ def get_stock_trades(
             date_str = trade.executed_at.strftime('%Y%m%d')
 
             result_trades.append({
+                'id': trade.id,  # TradingHistory ID 추가 (복기 생성 시 필요)
                 'date': date_str,
                 'price': trade.executed_price,
                 'quantity': trade.executed_quantity,

@@ -33,6 +33,7 @@ interface ChartDataPoint {
 }
 
 interface Trade {
+  id: number // TradingHistory ID (복기 생성 시 필요)
   date: string // YYYYMMDD
   price: number
   quantity: number
@@ -67,7 +68,7 @@ export default function RecapModal({
   isOpen,
   onClose,
   tradingPlanId,
-  tradingId,
+  tradingId: initialTradingId,
   orderNo,
   stockName,
   stockCode,
@@ -88,6 +89,7 @@ export default function RecapModal({
   const [showFormInputs, setShowFormInputs] = useState(false)
   const [avgPrice, setAvgPrice] = useState<number | null>(null)
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
+  const [tradingId, setTradingId] = useState<number | null>(initialTradingId || null)
   const catalystRef = useRef<HTMLTextAreaElement>(null)
   const priceChartRef = useRef<HTMLTextAreaElement>(null)
   const volumeRef = useRef<HTMLTextAreaElement>(null)
@@ -270,10 +272,12 @@ export default function RecapModal({
         etc: '',
       })
       setShowFormInputs(false)
+      setSelectedTrade(null)
+      setTradingId(initialTradingId || null)  // 초기 tradingId로 리셋
       // 쿼리 캐시 무효화하여 다음에 열릴 때 새로 조회하도록 함
       queryClient.removeQueries({ queryKey: ['recap'] })
     }
-  }, [isOpen, queryClient])
+  }, [isOpen, queryClient, initialTradingId])
 
   // 복기 생성 mutation
   const createMutation = useMutation({
@@ -380,6 +384,10 @@ export default function RecapModal({
   const handleMarkerClick = (trade: Trade) => {
     // 선택된 거래 저장
     setSelectedTrade(trade)
+
+    // TradingHistory ID를 설정 (API 호출 시 사용)
+    setTradingId(trade.id)
+    console.log(`[RecapModal] 거래 마커 클릭: trading_id=${trade.id}, price=${trade.price}, quantity=${trade.quantity}`)
 
     // 폼 입력 레이아웃 표시
     setShowFormInputs(true)
