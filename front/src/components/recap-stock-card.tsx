@@ -58,14 +58,9 @@ export default function RecapStockCard({ stock, onClick }: RecapStockCardProps) 
       onClick={() => onClick?.(stock)}
     >
       {/* Stock Info */}
-      <div className="space-y-2">
-        <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
-          {stock.stock_name}
-        </h3>
-        <p className="text-xs text-gray-500 font-mono">
-          {stock.stock_code}
-        </p>
-      </div>
+      <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+        {stock.stock_name}
+      </h3>
 
       {/* Recent Trades */}
       {stock.recent_trades && stock.recent_trades.length > 0 && (
