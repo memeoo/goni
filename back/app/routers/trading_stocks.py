@@ -172,16 +172,26 @@ def get_trading_stocks(
     limit: int = 100
 ):
     """
-    매매 종목 목록 조회
+    현재 사용자가 거래한 매매 종목 목록 조회
 
     Query Parameters:
     - skip: 오프셋 (기본값: 0)
     - limit: 조회 개수 (기본값: 100)
     """
     try:
-        # 전체 trading_stocks 조회 (사용자별 제한 없음 - 시스템 전역 종목)
-        stocks = db.query(TradingStock).offset(skip).limit(limit).all()
-        total = db.query(TradingStock).count()
+        # 현재 사용자의 거래 기록에 있는 종목만 조회 (사용자별 필터링)
+        query = db.query(TradingStock).join(
+            TradingHistory,
+            TradingStock.stock_code == TradingHistory.stock_code
+        ).filter(
+            TradingHistory.user_id == current_user.id
+        ).distinct()
+
+        # 전체 개수 (페이징 전)
+        total = query.count()
+
+        # 페이징 적용
+        stocks = query.offset(skip).limit(limit).all()
 
         result = [
             {
@@ -195,7 +205,7 @@ def get_trading_stocks(
             for stock in stocks
         ]
 
-        print(f"✅ 매매 종목 조회 완료: {len(result)}건 (전체: {total}건)")
+        print(f"✅ 매매 종목 조회 완료: {len(result)}건 (사용자 {current_user.id}의 거래 종목, 전체: {total}건)")
 
         return {
             "data": result,
