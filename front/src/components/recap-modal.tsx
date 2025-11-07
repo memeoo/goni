@@ -87,6 +87,8 @@ export default function RecapModal({
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const [showFormInputs, setShowFormInputs] = useState(false)
   const [avgPrice, setAvgPrice] = useState<number | null>(null)
+  const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
+  const catalystRef = useRef<HTMLTextAreaElement>(null)
   const priceChartRef = useRef<HTMLTextAreaElement>(null)
   const volumeRef = useRef<HTMLTextAreaElement>(null)
   const formContainerRef = useRef<HTMLDivElement>(null)
@@ -376,25 +378,17 @@ export default function RecapModal({
 
   // Buy/Sell 마커 클릭 처리
   const handleMarkerClick = (trade: Trade) => {
-    const isLongTrade = trade.trade_type === '매수'
+    // 선택된 거래 저장
+    setSelectedTrade(trade)
 
     // 폼 입력 레이아웃 표시
     setShowFormInputs(true)
 
-    // Buy일 경우 "가격(차트)" 필드에 포커스, Sell일 경우 "거래량" 필드에 포커스
-    if (isLongTrade) {
-      // Buy: 가격(차트) 필드로 스크롤 및 포커스
-      setTimeout(() => {
-        priceChartRef.current?.focus()
-        priceChartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-      }, 100)
-    } else {
-      // Sell: 거래량 필드로 스크롤 및 포커스
-      setTimeout(() => {
-        volumeRef.current?.focus()
-        volumeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-      }, 100)
-    }
+    // 재료(catalyst) 필드로 스크롤 및 포커스
+    setTimeout(() => {
+      catalystRef.current?.focus()
+      catalystRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 100)
   }
 
   // 호버된 봉의 정보를 포맷팅하는 함수
@@ -549,6 +543,58 @@ export default function RecapModal({
             </div>
           )}
 
+          {/* 선택된 거래 정보 표시 */}
+          {selectedTrade && (
+            <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex justify-between items-center gap-8">
+                <div className="flex items-center gap-6">
+                  {/* 매매 타입 */}
+                  <div className="flex flex-col items-center">
+                    <span className={`text-sm font-bold px-3 py-1 rounded ${
+                      selectedTrade.trade_type === '매수'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {selectedTrade.trade_type}
+                    </span>
+                  </div>
+
+                  {/* 체결 가격 */}
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-500 mb-1">체결가격</span>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {selectedTrade.price.toLocaleString()}원
+                    </span>
+                  </div>
+
+                  {/* 수량 */}
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-500 mb-1">수량</span>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {selectedTrade.quantity.toLocaleString()}주
+                    </span>
+                  </div>
+
+                  {/* 거래 날짜 */}
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-500 mb-1">거래일시</span>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {selectedTrade.datetime.slice(0, 4)}-{selectedTrade.datetime.slice(4, 6)}-{selectedTrade.datetime.slice(6, 8)} {selectedTrade.datetime.slice(8, 10)}:{selectedTrade.datetime.slice(10, 12)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 닫기 버튼 */}
+                <button
+                  onClick={() => setSelectedTrade(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+
             {/* 폼 입력 섹션 - Buy/Sell 아이콘 클릭 후에만 표시 */}
             {showFormInputs && (
               <div ref={formContainerRef}>
@@ -559,6 +605,7 @@ export default function RecapModal({
                       재료
                     </label>
                     <textarea
+                      ref={catalystRef}
                       name="catalyst"
                       value={formData.catalyst}
                       onChange={handleChange}
