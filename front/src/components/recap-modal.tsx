@@ -86,6 +86,7 @@ export default function RecapModal({
   })
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const [showFormInputs, setShowFormInputs] = useState(false)
+  const [avgPrice, setAvgPrice] = useState<number | null>(null)
   const priceChartRef = useRef<HTMLTextAreaElement>(null)
   const volumeRef = useRef<HTMLTextAreaElement>(null)
   const formContainerRef = useRef<HTMLDivElement>(null)
@@ -131,8 +132,26 @@ export default function RecapModal({
       console.log('[RecapModal] 종목별 거래기록 동기화 완료:', response.data)
       return response.data
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       console.log(`✅ ${stockCode} 거래기록 동기화 완료: ${data.added_trades}건 추가`)
+
+      // 동기화 후 종목의 현재 평가현황 데이터 조회 (avgPrice 획득)
+      try {
+        const token = Cookies.get('access_token') || localStorage.getItem('access_token')
+        const response = await fetch(`/api/trading-stocks/${stockCode}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        if (response.ok) {
+          const stockData = await response.json()
+          if (stockData.avg_prc) {
+            setAvgPrice(stockData.avg_prc)
+            console.log(`✅ ${stockCode} 평균단가 설정: ${stockData.avg_prc}원`)
+          }
+        }
+      } catch (error) {
+        console.warn('[RecapModal] 평균단가 조회 실패:', error)
+      }
+
       // 거래기록 다시 조회
       queryClient.invalidateQueries({ queryKey: ['stockTrades', stockCode] })
     },
@@ -519,6 +538,7 @@ export default function RecapModal({
                 stockCode={stockCode || ''}
                 data={chartData}
                 trades={tradesData}
+                avgPrice={avgPrice}
                 onHoveredIndexChange={setHoveredIndex}
                 onMarkerClick={handleMarkerClick}
               />

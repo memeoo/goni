@@ -30,6 +30,7 @@ interface DailyChartProps {
   stockCode: string
   data: ChartDataPoint[]
   trades?: Trade[] | null
+  avgPrice?: number | null
   onHoveredIndexChange?: (index: number | null) => void
   onMarkerClick?: (trade: Trade) => void
 }
@@ -108,7 +109,7 @@ const formatTradeDateTime = (datetimeStr: string | number): string => {
   }
 }
 
-export default function DailyChart({ stockCode, data, trades, onHoveredIndexChange, onMarkerClick }: DailyChartProps) {
+export default function DailyChart({ stockCode, data, trades, avgPrice, onHoveredIndexChange, onMarkerClick }: DailyChartProps) {
   const canvasPriceRef = useRef<HTMLCanvasElement>(null)
   const canvasVolumeRef = useRef<HTMLCanvasElement>(null)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
@@ -269,6 +270,47 @@ export default function DailyChart({ stockCode, data, trades, onHoveredIndexChan
     drawMovingAverage(ma10Data, '#00DDAA', 1.5) // 10일선 - 청녹색
     drawMovingAverage(ma5Data, '#FF69B4', 1.5) // 5일선 - 분홍색
 
+    // 평균단가 선 그리기
+    if (avgPrice && avgPrice > priceMin && avgPrice < priceMax) {
+      const avgPriceY = padding.top + chartHeight * (1 - (avgPrice - priceMin) / priceRange)
+
+      // 수평선 (주황색, 점선)
+      ctx.strokeStyle = '#FF8C00'
+      ctx.lineWidth = 2
+      ctx.setLineDash([5, 5])
+      ctx.beginPath()
+      ctx.moveTo(padding.left, avgPriceY)
+      ctx.lineTo(width - padding.right, avgPriceY)
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      // 오른쪽에 가격 표시
+      const priceText = avgPrice.toLocaleString('ko-KR', { maximumFractionDigits: 0 })
+      ctx.fillStyle = '#FF8C00'
+      ctx.font = 'bold 13px sans-serif'
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'middle'
+
+      // 배경박스
+      const textMetrics = ctx.measureText(priceText)
+      const boxPadding = 4
+      const boxX = width - padding.right + 5
+      const boxY = avgPriceY - 10
+      const boxWidth = textMetrics.width + boxPadding * 2
+      const boxHeight = 20
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+      ctx.fillRect(boxX, boxY, boxWidth, boxHeight)
+
+      ctx.strokeStyle = '#FF8C00'
+      ctx.lineWidth = 1
+      ctx.strokeRect(boxX, boxY, boxWidth, boxHeight)
+
+      // 텍스트
+      ctx.fillStyle = '#FF8C00'
+      ctx.fillText(priceText, boxX + boxPadding, avgPriceY)
+    }
+
     // 거래 마커 그리기
     if (trades && trades.length > 0) {
       console.log('[DailyChart] Drawing trade markers:', {
@@ -369,7 +411,7 @@ export default function DailyChart({ stockCode, data, trades, onHoveredIndexChan
       ctx.stroke()
       ctx.setLineDash([]) // 실선으로 복원
     }
-  }, [chartConfig, hoveredIndex, trades])
+  }, [chartConfig, hoveredIndex, trades, avgPrice])
 
   // 거래량 차트 그리기
   useEffect(() => {
