@@ -407,6 +407,15 @@ def sync_stock_trading_history(
                 detail=f"종목 {stock_code}을 찾을 수 없습니다"
             )
 
+        # 1-1단계: 데이터가 비어있으면 먼저 계좌평가현황 조회
+        if trading_stock.avg_prc is None or trading_stock.rmnd_qty is None or trading_stock.pur_amt is None:
+            print(f"  📊 {stock_code}의 평가현황 데이터가 비어있습니다. 계좌평가현황에서 데이터를 가져옵니다...")
+            _sync_account_evaluation_internal(db, current_user, [stock_code])
+            # 갱신된 데이터 재조회
+            trading_stock = db.query(TradingStock).filter(
+                TradingStock.stock_code == stock_code
+            ).first()
+
         # 2단계: TradingHistory에서 해당 종목의 가장 최근 order_no 조회
         latest_db_trade = db.query(TradingHistory).filter(
             TradingHistory.user_id == current_user.id,
