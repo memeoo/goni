@@ -261,6 +261,9 @@ def get_trading_stocks(
                 "stock_code": stock.stock_code,
                 "stock_name": stock.stock_name,
                 "is_downloaded": stock.is_downloaded,
+                "avg_prc": stock.avg_prc,  # 평균단가
+                "rmnd_qty": stock.rmnd_qty,  # 보유수량
+                "pur_amt": stock.pur_amt,  # 매입금액
                 "created_at": stock.created_at,
                 "updated_at": stock.updated_at,
                 "recent_trades": trades_info  # 최근 거래 3건 추가
@@ -484,6 +487,96 @@ def sync_stock_trading_history(
         )
 
 
+@router.post("/sync-account-evaluation")
+def sync_account_evaluation(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    계좌평가현황을 조회하여 trading_stocks 테이블의 평균단가, 보유수량, 매입금액을 업데이트합니다.
+
+    Returns:
+        dict: 동기화 결과
+    """
+    try:
+        # 사용자의 Kiwoom 계정 정보 확인
+        if not current_user.app_key or not current_user.app_secret:
+            raise HTTPException(
+                status_code=400,
+                detail="Kiwoom 계정 정보가 등록되지 않았습니다. 설정에서 계정 정보를 등록해주세요."
+            )
+
+        print(f"🔄 계좌평가현황 조회 중... (사용자: {current_user.id})")
+
+        # Kiwoom API 인스턴스 생성
+        kiwoom_api = KiwoomAPI(
+            app_key=current_user.app_key,
+            secret_key=current_user.app_secret,
+            account_no="",  # 계정번호는 API 응답에서 자동 처리
+            use_mock=False
+        )
+
+        # 계좌평가현황 조회
+        account_eval = kiwoom_api.get_account_evaluation(qry_tp='0', dmst_stex_tp='KRX')
+
+        if not account_eval:
+            print("⚠️ 계좌평가현황 조회 실패")
+            return {
+                "message": "계좌평가현황 조회 실패",
+                "updated_count": 0
+            }
+
+        # 보유 종목 정보 추출
+        stocks_info = account_eval.get('stk_acnt_evlt_prst', [])
+        print(f"✅ 계좌평가현황 조회 완료: {len(stocks_info)}개 종목")
+
+        # trading_stocks 테이블 업데이트
+        updated_count = 0
+        for stock_info in stocks_info:
+            stock_code = stock_info.get('stk_cd', '')
+            if not stock_code:
+                continue
+
+            # 기존 종목 조회
+            existing_stock = db.query(TradingStock).filter(
+                TradingStock.stock_code == stock_code
+            ).first()
+
+            if existing_stock:
+                # 계좌평가현황의 정보로 업데이트
+                existing_stock.avg_prc = stock_info.get('avg_prc')  # 평균단가
+                existing_stock.rmnd_qty = int(stock_info.get('rmnd_qty', 0))  # 보유수량
+                existing_stock.pur_amt = int(stock_info.get('pur_amt', 0))  # 매입금액
+                existing_stock.updated_at = datetime.utcnow()
+                updated_count += 1
+                print(f"  ✏️ {stock_info.get('stk_nm')}({stock_code}) 업데이트 "
+                      f"(평균단가: {existing_stock.avg_prc}원, 보유수량: {existing_stock.rmnd_qty}주)")
+            else:
+                # 새로운 종목 추가 (필요시)
+                # trading_stocks에 없는 종목은 계좌평가현황에서도 보유하지 않으므로 스킵
+                pass
+
+        db.commit()
+        print(f"✅ 계좌평가현황 동기화 완료: {updated_count}개 종목 업데이트")
+
+        return {
+            "message": "계좌평가현황 동기화 완료",
+            "updated_count": updated_count,
+            "total_stocks": len(stocks_info)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ 계좌평가현황 동기화 중 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"계좌평가현황 동기화 중 오류가 발생했습니다: {str(e)}"
+        )
+
+
 @router.get("/{stock_code}")
 def get_trading_stock(
     stock_code: str,
@@ -503,6 +596,9 @@ def get_trading_stock(
         "stock_code": stock.stock_code,
         "stock_name": stock.stock_name,
         "is_downloaded": stock.is_downloaded,
+        "avg_prc": stock.avg_prc,
+        "rmnd_qty": stock.rmnd_qty,
+        "pur_amt": stock.pur_amt,
         "created_at": stock.created_at,
         "updated_at": stock.updated_at,
     }

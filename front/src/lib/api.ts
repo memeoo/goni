@@ -132,4 +132,6 @@ export const tradingStocksAPI = {
     api.post(`/api/trading-stocks/sync-from-kiwoom?days=${days}`),
   syncStockHistory: (stockCode: string) =>
     api.post(`/api/trading-stocks/${stockCode}/sync-history`),
+  syncAccountEvaluation: () =>
+    api.post('/api/trading-stocks/sync-account-evaluation'),
 }

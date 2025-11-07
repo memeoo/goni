@@ -72,6 +72,12 @@ class TradingStock(Base):
     stock_code = sa.Column(sa.String, unique=True, nullable=False, index=True)  # 종목코드
     is_downloaded = sa.Column(sa.Boolean, default=False)  # 다운로드 여부
     latest_orderno = sa.Column(sa.String, nullable=True)  # 최근 거래의 주문번호 (마지막으로 동기화된 거래)
+
+    # 계좌평가현황에서 가져온 정보
+    avg_prc = sa.Column(sa.Float, nullable=True)  # 평균단가
+    rmnd_qty = sa.Column(sa.Integer, nullable=True)  # 보유수량
+    pur_amt = sa.Column(sa.BigInteger, nullable=True)  # 매입금액
+
     created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
     updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
