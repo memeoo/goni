@@ -130,4 +130,6 @@ export const tradingStocksAPI = {
     api.get(`/api/trading-stocks?skip=${skip}&limit=${limit}`),
   syncFromKiwoom: (days = 5) =>
     api.post(`/api/trading-stocks/sync-from-kiwoom?days=${days}`),
+  syncStockHistory: (stockCode: string) =>
+    api.post(`/api/trading-stocks/${stockCode}/sync-history`),
 }

@@ -19,13 +19,13 @@ router = APIRouter(prefix="/api/trading-stocks", tags=["trading-stocks"])
 def sync_trading_stocks_from_kiwoom(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    days: int = 30
+    days: int = 60
 ):
     """
     Kiwoom API에서 실제 매매 기록을 조회하여 trading_stocks 테이블에 동기화
 
     Args:
-        days: 조회할 일수 (기본값: 5일)
+        days: 조회할 일수 (기본값: 60일)
 
     Returns:
         dict: 동기화 결과
@@ -70,24 +70,39 @@ def sync_trading_stocks_from_kiwoom(
         # 1단계: TradingHistory 테이블에 매매 기록 저장
         added_trades = 0
         for trade in kiwoom_trades:
-            # 중복 확인 (order_no 기준)
-            existing_trade = db.query(TradingHistory).filter(
-                TradingHistory.user_id == current_user.id,
-                TradingHistory.order_no == trade.get('order_no', ''),
-                TradingHistory.stock_code == trade['stock_code']
-            ).first()
+            try:
+                # 날짜시간 파싱
+                datetime_str = trade['datetime']  # YYYYMMDDHHmmss 형식
+                executed_at = datetime.strptime(datetime_str, '%Y%m%d%H%M%S')
 
-            if not existing_trade and trade.get('order_no'):  # order_no가 있는 경우만 중복 체크
-                try:
-                    # 날짜시간 파싱
-                    datetime_str = trade['datetime']  # YYYYMMDDHHmmss 형식
-                    executed_at = datetime.strptime(datetime_str, '%Y%m%d%H%M%S')
+                order_no = trade.get('order_no', '')
 
+                # 중복 확인 로직
+                # 1단계: order_no가 있으면 order_no 기준으로 중복 체크
+                if order_no:
+                    existing_trade = db.query(TradingHistory).filter(
+                        TradingHistory.user_id == current_user.id,
+                        TradingHistory.order_no == order_no,
+                        TradingHistory.stock_code == trade['stock_code']
+                    ).first()
+                else:
+                    # 2단계: order_no가 없으면 (stock_code + executed_at + price + quantity)로 중복 체크
+                    # 같은 시간에 같은 가격으로 같은 수량 매매한 경우
+                    existing_trade = db.query(TradingHistory).filter(
+                        TradingHistory.user_id == current_user.id,
+                        TradingHistory.stock_code == trade['stock_code'],
+                        TradingHistory.executed_at == executed_at,
+                        TradingHistory.executed_price == trade['price'],
+                        TradingHistory.executed_quantity == trade['quantity']
+                    ).first()
+
+                # 중복이 아니면 저장
+                if not existing_trade:
                     new_trade = TradingHistory(
                         user_id=current_user.id,
                         executed_at=executed_at,
                         trade_type=trade['trade_type'],
-                        order_no=trade.get('order_no', ''),
+                        order_no=order_no,
                         stock_name=trade['stock_name'],
                         stock_code=trade['stock_code'],
                         executed_price=trade['price'],
@@ -98,22 +113,32 @@ def sync_trading_stocks_from_kiwoom(
                     db.add(new_trade)
                     added_trades += 1
 
-                except Exception as e:
-                    print(f"⚠️ 매매 기록 저장 실패: {trade.get('stock_name')} - {e}")
-                    continue
+            except Exception as e:
+                print(f"⚠️ 매매 기록 저장 실패: {trade.get('stock_name')} - {e}")
+                import traceback
+                traceback.print_exc()
+                continue
 
         db.commit()
         print(f"✅ TradingHistory 저장 완료: {added_trades}건 추가")
 
         # 2단계: trading_stocks 테이블에 종목 정보 저장 및 업데이트
+        # 종목별로 가장 최근의 order_no를 추적 (datetime 기준 최신순)
         unique_stocks = {}
         for trade in kiwoom_trades:
             stock_code = trade['stock_code']
             if stock_code not in unique_stocks:
                 unique_stocks[stock_code] = {
                     'stock_code': stock_code,
-                    'stock_name': trade['stock_name']
+                    'stock_name': trade['stock_name'],
+                    'latest_orderno': trade.get('order_no', ''),
+                    'datetime': trade.get('datetime', '')
                 }
+            else:
+                # 더 최근의 거래(datetime이 더 큰 값)가 있으면 업데이트
+                if trade.get('datetime', '') > unique_stocks[stock_code]['datetime']:
+                    unique_stocks[stock_code]['latest_orderno'] = trade.get('order_no', '')
+                    unique_stocks[stock_code]['datetime'] = trade.get('datetime', '')
 
         added_stocks = 0
         updated_stocks = 0
@@ -124,21 +149,23 @@ def sync_trading_stocks_from_kiwoom(
             ).first()
 
             if existing_stock:
-                # 기존 종목 - stock_name 업데이트 (is_downloaded는 유지)
+                # 기존 종목 - stock_name과 latest_orderno 업데이트 (is_downloaded는 유지)
                 existing_stock.stock_name = stock_info['stock_name']
+                existing_stock.latest_orderno = stock_info['latest_orderno']
                 existing_stock.updated_at = datetime.utcnow()
                 updated_stocks += 1
-                print(f"  ✏️ {stock_info['stock_name']}({stock_code}) 업데이트")
+                print(f"  ✏️ {stock_info['stock_name']}({stock_code}) 업데이트 (latest_orderno: {stock_info['latest_orderno']})")
             else:
                 # 신규 종목 추가
                 new_stock = TradingStock(
                     stock_name=stock_info['stock_name'],
                     stock_code=stock_code,
+                    latest_orderno=stock_info['latest_orderno'],
                     is_downloaded=False
                 )
                 db.add(new_stock)
                 added_stocks += 1
-                print(f"  ✨ {stock_info['stock_name']}({stock_code}) 추가")
+                print(f"  ✨ {stock_info['stock_name']}({stock_code}) 추가 (latest_orderno: {stock_info['latest_orderno']})")
 
         db.commit()
         print(f"✅ trading_stocks 업데이트 완료: {added_stocks}건 추가, {updated_stocks}건 업데이트")
@@ -172,7 +199,9 @@ def get_trading_stocks(
     limit: int = 100
 ):
     """
-    현재 사용자가 거래한 매매 종목 목록 조회
+    현재 사용자가 거래한 매매 종목 목록 조회 (최근 거래순 정렬)
+
+    종목들은 가장 최근 매매기록 순서대로 정렬됩니다.
 
     Query Parameters:
     - skip: 오프셋 (기본값: 0)
@@ -180,32 +209,64 @@ def get_trading_stocks(
     """
     try:
         # 현재 사용자의 거래 기록에 있는 종목만 조회 (사용자별 필터링)
-        query = db.query(TradingStock).join(
+        # 가장 최근 거래 시간 기준으로 정렬
+        from sqlalchemy import func
+
+        query = db.query(
+            TradingStock,
+            func.max(TradingHistory.executed_at).label('latest_trade_at')
+        ).join(
             TradingHistory,
             TradingStock.stock_code == TradingHistory.stock_code
         ).filter(
             TradingHistory.user_id == current_user.id
-        ).distinct()
+        ).group_by(
+            TradingStock.id
+        ).order_by(
+            func.max(TradingHistory.executed_at).desc()  # 최근 거래순으로 정렬
+        )
 
         # 전체 개수 (페이징 전)
         total = query.count()
 
         # 페이징 적용
-        stocks = query.offset(skip).limit(limit).all()
+        stocks_with_dates = query.offset(skip).limit(limit).all()
 
-        result = [
-            {
+        # TradingStock 객체만 추출
+        stocks = [item[0] for item in stocks_with_dates]
+
+        result = []
+        for stock in stocks:
+            # 각 종목별 최근 거래 3건 조회
+            recent_trades = db.query(TradingHistory).filter(
+                TradingHistory.user_id == current_user.id,
+                TradingHistory.stock_code == stock.stock_code
+            ).order_by(
+                TradingHistory.executed_at.desc()
+            ).limit(3).all()
+
+            # 거래 정보 포맷팅
+            trades_info = [
+                {
+                    "trade_type": trade.trade_type,
+                    "executed_price": trade.executed_price,
+                    "executed_quantity": trade.executed_quantity,
+                    "executed_at": trade.executed_at.strftime('%Y-%m-%d') if trade.executed_at else None
+                }
+                for trade in recent_trades
+            ]
+
+            result.append({
                 "id": stock.id,
                 "stock_code": stock.stock_code,
                 "stock_name": stock.stock_name,
                 "is_downloaded": stock.is_downloaded,
                 "created_at": stock.created_at,
                 "updated_at": stock.updated_at,
-            }
-            for stock in stocks
-        ]
+                "recent_trades": trades_info  # 최근 거래 3건 추가
+            })
 
-        print(f"✅ 매매 종목 조회 완료: {len(result)}건 (사용자 {current_user.id}의 거래 종목, 전체: {total}건)")
+        print(f"✅ 매매 종목 조회 완료: {len(result)}건 (사용자 {current_user.id}의 거래 종목, 최근순 정렬, 전체: {total}건)")
 
         return {
             "data": result,
@@ -221,6 +282,205 @@ def get_trading_stocks(
         raise HTTPException(
             status_code=500,
             detail=f"매매 종목 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+
+@router.post("/{stock_code}/sync-history")
+def sync_stock_trading_history(
+    stock_code: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    특정 종목의 거래기록을 스마트하게 동기화 (증분 동기화)
+
+    동기화 전략:
+    1. TradingHistory에서 해당 종목의 가장 최근 order_no 조회
+    2. TradingStock의 latest_orderno와 비교
+    3. 같으면: 이미 최신 상태 → 동기화 스킵
+    4. 다르면:
+       - is_downloaded = false: 60일 전체 조회 (첫 다운로드)
+       - is_downloaded = true: 최근 거래만 조회 (증분 동기화)
+
+    Args:
+        stock_code: 종목코드 (6자리)
+
+    Returns:
+        dict: 동기화 결과
+    """
+    try:
+        # 사용자의 Kiwoom 계정 정보 확인
+        if not current_user.app_key or not current_user.app_secret:
+            raise HTTPException(
+                status_code=400,
+                detail="Kiwoom 계정 정보가 등록되지 않았습니다. 설정에서 계정 정보를 등록해주세요."
+            )
+
+        print(f"🔄 종목 {stock_code} 동기화 시작... (사용자: {current_user.id})")
+
+        # 1단계: TradingStock 조회
+        trading_stock = db.query(TradingStock).filter(
+            TradingStock.stock_code == stock_code
+        ).first()
+
+        if not trading_stock:
+            raise HTTPException(
+                status_code=404,
+                detail=f"종목 {stock_code}을 찾을 수 없습니다"
+            )
+
+        # 2단계: TradingHistory에서 해당 종목의 가장 최근 order_no 조회
+        latest_db_trade = db.query(TradingHistory).filter(
+            TradingHistory.user_id == current_user.id,
+            TradingHistory.stock_code == stock_code
+        ).order_by(TradingHistory.executed_at.desc()).first()
+
+        latest_db_orderno = latest_db_trade.order_no if latest_db_trade else None
+        latest_stock_orderno = trading_stock.latest_orderno
+
+        print(f"  DB latest_orderno: {latest_db_orderno}")
+        print(f"  Stock latest_orderno: {latest_stock_orderno}")
+        print(f"  is_downloaded: {trading_stock.is_downloaded}")
+
+        # 3단계: 동기화 필요 여부 판단
+        if latest_db_orderno == latest_stock_orderno and latest_stock_orderno:
+            print(f"✅ {stock_code}는 이미 최신 상태입니다. 동기화 스킵")
+            return {
+                "message": f"{stock_code}는 이미 최신 상태입니다",
+                "stock_code": stock_code,
+                "sync_type": "skipped",
+                "added_trades": 0
+            }
+
+        # 4단계: Kiwoom API로 거래기록 조회
+        kiwoom_api = KiwoomAPI(
+            app_key=current_user.app_key,
+            secret_key=current_user.app_secret,
+            account_no="",
+            use_mock=False
+        )
+
+        # is_downloaded 상태에 따라 조회 기간 결정
+        if trading_stock.is_downloaded:
+            # 기존에 다운로드됨 → 최근 거래만 조회 (7일)
+            sync_type = "incremental"
+            days_to_fetch = 7
+            print(f"  증분 동기화 실행 (최근 7일)")
+        else:
+            # 처음 다운로드 → 전체 기간 조회 (60일)
+            sync_type = "full"
+            days_to_fetch = 60
+            print(f"  전체 다운로드 실행 (최근 60일)")
+
+        kiwoom_trades = kiwoom_api.get_recent_trades(days=days_to_fetch)
+
+        if not kiwoom_trades:
+            print(f"⚠️ {stock_code}의 거래기록이 없습니다")
+            return {
+                "message": f"{stock_code} 종목의 조회된 거래기록이 없습니다",
+                "stock_code": stock_code,
+                "sync_type": sync_type,
+                "added_trades": 0
+            }
+
+        # 해당 stock_code의 거래기록만 필터링
+        filtered_trades = [t for t in kiwoom_trades if t['stock_code'] == stock_code]
+        print(f"✅ Kiwoom API에서 {stock_code}의 거래기록 조회 완료: {len(filtered_trades)}건")
+
+        if not filtered_trades:
+            return {
+                "message": f"{stock_code} 종목의 거래기록이 없습니다",
+                "stock_code": stock_code,
+                "sync_type": sync_type,
+                "added_trades": 0
+            }
+
+        # 5단계: TradingHistory에 거래기록 저장
+        added_trades = 0
+        for trade in filtered_trades:
+            try:
+                # 날짜시간 파싱
+                datetime_str = trade['datetime']  # YYYYMMDDHHmmss 형식
+                executed_at = datetime.strptime(datetime_str, '%Y%m%d%H%M%S')
+                order_no = trade.get('order_no', '')
+
+                # 중복 확인 로직
+                if order_no:
+                    existing_trade = db.query(TradingHistory).filter(
+                        TradingHistory.user_id == current_user.id,
+                        TradingHistory.order_no == order_no,
+                        TradingHistory.stock_code == trade['stock_code']
+                    ).first()
+                else:
+                    existing_trade = db.query(TradingHistory).filter(
+                        TradingHistory.user_id == current_user.id,
+                        TradingHistory.stock_code == trade['stock_code'],
+                        TradingHistory.executed_at == executed_at,
+                        TradingHistory.executed_price == trade['price'],
+                        TradingHistory.executed_quantity == trade['quantity']
+                    ).first()
+
+                # 중복이 아니면 저장
+                if not existing_trade:
+                    new_trade = TradingHistory(
+                        user_id=current_user.id,
+                        executed_at=executed_at,
+                        trade_type=trade['trade_type'],
+                        order_no=order_no,
+                        stock_name=trade['stock_name'],
+                        stock_code=trade['stock_code'],
+                        executed_price=trade['price'],
+                        executed_quantity=trade['quantity'],
+                        executed_amount=int(trade['price'] * trade['quantity']),
+                        broker='kiwoom'
+                    )
+                    db.add(new_trade)
+                    added_trades += 1
+
+            except Exception as e:
+                print(f"⚠️ 거래기록 저장 실패: {trade.get('stock_name')} - {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+
+        db.commit()
+        print(f"✅ {stock_code} 거래기록 저장 완료: {added_trades}건 추가")
+
+        # 6단계: TradingStock 업데이트
+        # 해당 종목의 가장 최근 order_no 찾기
+        latest_trade = None
+        latest_datetime = ''
+        for trade in filtered_trades:
+            trade_datetime = trade.get('datetime', '')
+            if trade_datetime > latest_datetime:
+                latest_datetime = trade_datetime
+                latest_trade = trade
+
+        if latest_trade:
+            trading_stock.latest_orderno = latest_trade.get('order_no', '')
+            trading_stock.is_downloaded = True
+            trading_stock.updated_at = datetime.utcnow()
+            db.commit()
+            print(f"✅ {stock_code} TradingStock 업데이트")
+            print(f"  - latest_orderno: {trading_stock.latest_orderno}")
+            print(f"  - is_downloaded: True")
+
+        return {
+            "message": f"{stock_code} 종목의 거래기록 동기화 완료",
+            "stock_code": stock_code,
+            "sync_type": sync_type,
+            "added_trades": added_trades
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ 종목별 거래기록 동기화 중 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"거래기록 동기화 중 오류가 발생했습니다: {str(e)}"
         )
 
 

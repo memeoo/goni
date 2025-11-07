@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import Cookies from 'js-cookie'
 import DailyChart from './daily-chart'
+import { tradingStocksAPI } from '@/lib/api'
 
 // 거래량을 1000 단위로 K로 표시
 const formatVolume = (value: number): string => {
@@ -122,6 +123,24 @@ export default function RecapModal({
     retry: false, // 404도 재시도하지 않음
   })
 
+  // 종목의 거래기록 동기화 (종목 클릭 시 한 번만 실행)
+  const syncHistoryMutation = useMutation({
+    mutationFn: async (code: string) => {
+      console.log('[RecapModal] 종목별 거래기록 동기화 시작:', code)
+      const response = await tradingStocksAPI.syncStockHistory(code)
+      console.log('[RecapModal] 종목별 거래기록 동기화 완료:', response.data)
+      return response.data
+    },
+    onSuccess: (data) => {
+      console.log(`✅ ${stockCode} 거래기록 동기화 완료: ${data.added_trades}건 추가`)
+      // 거래기록 다시 조회
+      queryClient.invalidateQueries({ queryKey: ['stockTrades', stockCode] })
+    },
+    onError: (error: any) => {
+      console.warn(`⚠️ ${stockCode} 거래기록 동기화 실패:`, error)
+    }
+  })
+
   // 일봉 차트 데이터 조회
   const { data: chartData, isLoading: chartLoading, error: chartError } = useQuery({
     queryKey: ['dailyChart', stockCode],
@@ -206,6 +225,14 @@ export default function RecapModal({
       })
     }
   }, [existingRecap])
+
+  // 모달이 열릴 때 종목의 거래기록 동기화 시작
+  useEffect(() => {
+    if (isOpen && stockCode && !syncHistoryMutation.isPending) {
+      console.log('[RecapModal] 종목 클릭 - 거래기록 동기화 시작:', stockCode)
+      syncHistoryMutation.mutate(stockCode)
+    }
+  }, [isOpen, stockCode])
 
   // 모달이 닫힐 때 폼 초기화
   useEffect(() => {

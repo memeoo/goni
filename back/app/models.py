@@ -71,6 +71,7 @@ class TradingStock(Base):
     stock_name = sa.Column(sa.String, nullable=False)  # 종목명
     stock_code = sa.Column(sa.String, unique=True, nullable=False, index=True)  # 종목코드
     is_downloaded = sa.Column(sa.Boolean, default=False)  # 다운로드 여부
+    latest_orderno = sa.Column(sa.String, nullable=True)  # 최근 거래의 주문번호 (마지막으로 동기화된 거래)
     created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
     updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

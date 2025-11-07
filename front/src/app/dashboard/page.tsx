@@ -35,6 +35,7 @@ const fetchRecentTrades = async () => {
     stock_code: stock.stock_code,
     stock_name: stock.stock_name,
     is_downloaded: stock.is_downloaded,
+    recent_trades: stock.recent_trades || [],
   }))
 }
 
@@ -69,23 +70,11 @@ export default function DashboardPage() {
   const isLoading = mode === 'plan' ? isLoadingStocks : isLoadingTrades
   const error = mode === 'plan' ? stocksError : tradesError
 
-  // 마운트 상태 설정 및 Kiwoom 자동 동기화
+  // 마운트 상태 설정
   useEffect(() => {
     setMounted(true)
-
-    // 컴포넌트 마운트 시 Kiwoom에서 매매 기록 동기화
-    const syncKiwoomTrades = async () => {
-      try {
-        console.log('🔄 Kiwoom API에서 매매 기록 동기화 중...')
-        const response = await tradingStocksAPI.syncFromKiwoom(30) // 최근 30일 조회
-        console.log('✅ Kiwoom 동기화 완료:', response.data)
-      } catch (error) {
-        console.warn('⚠️ Kiwoom 동기화 실패:', error)
-        // 동기화 실패해도 계속 진행 (기존 데이터 표시)
-      }
-    }
-
-    syncKiwoomTrades()
+    // 로그인 시 이미 최근 30일 거래기록을 동기화했으므로
+    // 대시보드 마운트 시에는 추가 동기화 불필요
   }, [])
 
   if (!mounted) return null
