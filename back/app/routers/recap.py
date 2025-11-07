@@ -106,9 +106,9 @@ def create_recap(
     # trading_id가 있으면 trading_id 기반으로 우선 처리
     if recap.trading_id:
         # trading_id로 거래 기록 확인
-        trading = db.query(models.Trading).filter(
-            models.Trading.id == recap.trading_id,
-            models.Trading.user_id == current_user.id
+        trading = db.query(models.TradingHistory).filter(
+            models.TradingHistory.id == recap.trading_id,
+            models.TradingHistory.user_id == current_user.id
         ).first()
 
         if not trading:
