@@ -112,6 +112,32 @@ class TradingHistory(Base):
     user = relationship("User")
 
 
+class StocksInfo(Base):
+    __tablename__ = "stocks_info"
+
+    id = sa.Column(sa.Integer, primary_key=True, index=True)
+
+    # ka10099 API 응답 데이터 매핑
+    code = sa.Column(sa.String, unique=True, nullable=False, index=True)  # 종목코드
+    name = sa.Column(sa.String, nullable=False)  # 종목명
+    list_count = sa.Column(sa.String, nullable=True)  # 상장주식수
+    audit_info = sa.Column(sa.String, nullable=True)  # 감시종목 (정상, 투자주의환기종목 등)
+    reg_day = sa.Column(sa.String, nullable=True)  # 상장일 (YYYYMMDD)
+    last_price = sa.Column(sa.String, nullable=True)  # 종목액면가
+    state = sa.Column(sa.String, nullable=True)  # 증거금상태 (증거금100%, 관리종목 등)
+    market_code = sa.Column(sa.String, nullable=True)  # 마켓코드 (0: 코스피, 10: 코스닥 등)
+    market_name = sa.Column(sa.String, nullable=True)  # 마켓명 (코스피, 코스닥 등)
+    up_name = sa.Column(sa.String, nullable=True)  # 상위종목명
+    up_size_name = sa.Column(sa.String, nullable=True)  # 상위사이즈명
+    company_class_name = sa.Column(sa.String, nullable=True)  # 회사분류명 (외국기업 등)
+    order_warning = sa.Column(sa.String, nullable=True)  # 주문경고 (0: 정상, 1: 경고 등)
+    nxt_enable = sa.Column(sa.String, nullable=True)  # 다음조회여부 (Y/N)
+
+    # 시스템 정보
+    created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
+    updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Recap(Base):
     __tablename__ = "recap"
 

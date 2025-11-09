@@ -352,6 +352,82 @@ class KiwoomAPI:
         logger.debug(f"계좌평가현황: {json.dumps(result, indent=4, ensure_ascii=False)}")
         return result
 
+    def get_stocks_info(
+        self,
+        mrkt_tp: str = '0',
+        cont_yn: str = 'N',
+        next_key: str = ''
+    ) -> Optional[Dict[str, Any]]:
+        """
+        종목정보리스트를 조회합니다 (ka10099 API).
+
+        Args:
+            mrkt_tp: 시장구분
+                    '0': 코스피 (기본값)
+                    '10': 코스닥
+                    '3': ELW
+                    '8': ETF
+                    '30': K-OTC
+                    '50': 코넥스
+                    '5': 신주인수권
+                    '4': 뮤추얼펀드
+                    '6': 리츠
+                    '9': 하이일드
+            cont_yn: 연속조회여부 ('N' 또는 'Y')
+            next_key: 연속조회키
+
+        Returns:
+            dict: 종목정보 데이터
+            {
+                'return_msg': '정상적으로 처리되었습니다',
+                'return_code': 0,
+                'list': [
+                    {
+                        'code': '005930',              # 종목코드
+                        'name': '삼성전자',            # 종목명
+                        'listCount': '0000000123759593', # 상장주식수
+                        'auditInfo': '투자주의환기종목', # 감시종목
+                        'regDay': '20091204',          # 상장일
+                        'lastPrice': '00000197',       # 종목액면가
+                        'state': '관리종목',            # 증거금상태
+                        'marketCode': '10',            # 마켓코드
+                        'marketName': '코스닥',        # 마켓명
+                        'upName': '',                  # 상위종목명
+                        'upSizeName': '',              # 상위사이즈명
+                        'companyClassName': '외국기업', # 회사분류명
+                        'orderWarning': '0',           # 주문경고
+                        'nxtEnable': 'Y'               # 다음조회여부
+                    },
+                    ...
+                ],
+                'cont-yn': 'N',                        # 연속조회여부 (응답 헤더)
+                'next-key': ''                         # 연속조회키 (응답 헤더)
+            }
+        """
+        endpoint = '/api/dostk/stkinfo'
+        api_id = 'ka10099'
+
+        data = {
+            'mrkt_tp': mrkt_tp,
+        }
+
+        result = self._make_request(endpoint, api_id, data, cont_yn=cont_yn, next_key=next_key)
+
+        if not result:
+            logger.error(f"종목정보리스트 조회 실패: mrkt_tp={mrkt_tp}")
+            return None
+
+        # 응답 검증
+        if result.get('return_code') != 0:
+            logger.error(f"종목정보리스트 조회 오류: {result.get('return_msg', 'Unknown error')}")
+            return None
+
+        # 종목 정보 파싱
+        stocks = result.get('list', [])
+        logger.info(f"종목정보리스트 조회 성공: 시장={mrkt_tp}, 조회된 종목 수={len(stocks)}")
+
+        return result
+
     def get_recent_trades(self, days: int = 5) -> List[Dict[str, Any]]:
         """
         최근 N일간의 매매(매수/매도) 데이터를 가져옵니다.

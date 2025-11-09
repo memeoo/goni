@@ -90,6 +90,32 @@ $$ language 'plpgsql';
 CREATE TRIGGER update_trading_plans_updated_at BEFORE UPDATE ON trading_plans
     FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
+CREATE TABLE IF NOT EXISTS stocks_info (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(10) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    list_count VARCHAR(50),
+    audit_info VARCHAR(50),
+    reg_day VARCHAR(10),
+    last_price VARCHAR(20),
+    state VARCHAR(50),
+    market_code VARCHAR(10),
+    market_name VARCHAR(50),
+    up_name VARCHAR(255),
+    up_size_name VARCHAR(255),
+    company_class_name VARCHAR(50),
+    order_warning VARCHAR(10),
+    nxt_enable VARCHAR(1),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- stocks_info 테이블 인덱스
+CREATE INDEX IF NOT EXISTS idx_stocks_info_code ON stocks_info(code);
+CREATE INDEX IF NOT EXISTS idx_stocks_info_market_code ON stocks_info(market_code);
+CREATE INDEX IF NOT EXISTS idx_stocks_info_name ON stocks_info(name);
+CREATE INDEX IF NOT EXISTS idx_stocks_info_created_at ON stocks_info(created_at DESC);
+
 -- 권한 설정
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO goniadmin;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO goniadmin;

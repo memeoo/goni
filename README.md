@@ -106,6 +106,109 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-09: 키움증권 API ka10099 종목정보 조회 기능 추가
+
+#### 기능 설명
+- **백엔드 파일**:
+  - `analyze/lib/kiwoom.py`: `get_stocks_info()` 메서드 추가
+  - `back/app/models.py`: `StocksInfo` 모델 추가
+  - `back/app/schemas.py`: `StocksInfo` 스키마 추가
+  - `back/app/routers/stocks_info.py`: 종목정보 API 라우터 신규 생성
+  - `back/main.py`: stocks_info 라우터 등록
+  - `init.sql`: stocks_info 테이블 및 인덱스 추가
+
+#### 1. KiwoomAPI 확장 (analyze/lib/kiwoom.py)
+- **메서드**: `get_stocks_info(mrkt_tp='0', cont_yn='N', next_key='')`
+  - 키움증권 Open REST API ka10099 사용
+  - 시장구분별 종목정보 조회
+  - 연속조회 지원 (페이징)
+
+#### 2. 데이터베이스 모델 (back/app/models.py)
+- **테이블**: `stocks_info`
+  - 종목코드 (code): 고유키, 인덱싱
+  - 종목명 (name): 필수
+  - 상장주식수 (list_count)
+  - 감시종목 (audit_info)
+  - 상장일 (reg_day)
+  - 종목액면가 (last_price)
+  - 증거금상태 (state)
+  - 마켓코드 (market_code): 인덱싱
+  - 마켓명 (market_name)
+  - 상위종목명 (up_name)
+  - 상위사이즈명 (up_size_name)
+  - 회사분류명 (company_class_name)
+  - 주문경고 (order_warning)
+  - 다음조회여부 (nxt_enable)
+  - 생성/수정 타임스탐프
+
+#### 3. API 엔드포인트 (back/app/routers/stocks_info.py)
+- **GET `/api/stocks-info/`**: DB에 저장된 종목정보 조회
+  - 파라미터: `market_code` (선택), `skip`, `limit`
+  - 응답: 종목정보 리스트 + 페이징 정보
+
+- **POST `/api/stocks-info/sync/{market_code}`**: 키움 API 동기화
+  - 파라미터: `market_code` (필수)
+  - 동작:
+    1. 사용자의 키움 API 인증정보로 ka10099 호출
+    2. 조회된 종목들을 DB에 저장/업데이트
+    3. 중복 체크 (code 기준)
+  - 응답: 추가/업데이트/중복 개수
+
+- **GET `/api/stocks-info/search`**: 종목정보 검색
+  - 파라미터: `q` (검색어), `market_code` (선택), `skip`, `limit`
+  - 검색 대상: 종목코드, 종목명
+
+- **GET `/api/stocks-info/{code}`**: 종목코드로 상세 조회
+  - 파라미터: `code` (종목코드)
+  - 응답: 단일 종목정보
+
+#### 4. 시장구분 (market_code)
+- '0': 코스피
+- '10': 코스닥
+- '3': ELW
+- '8': ETF
+- '30': K-OTC
+- '50': 코넥스
+- '5': 신주인수권
+- '4': 뮤추얼펀드
+- '6': 리츠
+- '9': 하이일드
+
+#### 5. 데이터베이스 구조
+- **테이블**: stocks_info
+- **인덱스**:
+  - code (고유 인덱스)
+  - market_code
+  - name
+  - created_at DESC
+
+#### 사용 예시
+```bash
+# 코스피 종목정보 동기화 (인증 필요)
+curl -X POST http://localhost:8000/api/stocks-info/sync/0 \
+  -H "Authorization: Bearer {token}"
+
+# 코스닥 종목정보 동기화
+curl -X POST http://localhost:8000/api/stocks-info/sync/10 \
+  -H "Authorization: Bearer {token}"
+
+# DB에 저장된 종목정보 조회
+curl -X GET "http://localhost:8000/api/stocks-info/?market_code=0&limit=100"
+
+# 종목정보 검색 (예: 삼성)
+curl -X GET "http://localhost:8000/api/stocks-info/search?q=삼성&limit=50"
+
+# 특정 종목 조회
+curl -X GET "http://localhost:8000/api/stocks-info/005930"
+```
+
+#### 주요 특징
+- 실제 키움 API 데이터 사용 (Mock 데이터 없음)
+- 사용자별 인증정보 활용 (보안)
+- 종목코드 기반 중복 체크로 데이터 일관성 유지
+- 페이징 지원으로 대량 데이터 조회 최적화
+- 검색 기능으로 종목 찾기 편의성 제공
+
 ### 2025-11-09: 대시보드 새로고침 버튼 기능 구현
 
 #### 기능 설명

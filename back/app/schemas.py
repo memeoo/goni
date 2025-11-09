@@ -189,3 +189,36 @@ class Trading(TradingBase):
 class SyncDashboardTradesRequest(BaseModel):
     """대시보드 종목 거래 기록 동기화 요청"""
     stock_codes: List[str]  # 종목코드 리스트
+
+
+class StocksInfoBase(BaseModel):
+    """종목정보 기본 정보 (ka10099 API)"""
+    code: str  # 종목코드
+    name: str  # 종목명
+    list_count: Optional[str] = None  # 상장주식수
+    audit_info: Optional[str] = None  # 감시종목 (정상, 투자주의환기종목 등)
+    reg_day: Optional[str] = None  # 상장일 (YYYYMMDD)
+    last_price: Optional[str] = None  # 종목액면가
+    state: Optional[str] = None  # 증거금상태 (증거금100%, 관리종목 등)
+    market_code: Optional[str] = None  # 마켓코드 (0: 코스피, 10: 코스닥 등)
+    market_name: Optional[str] = None  # 마켓명 (코스피, 코스닥 등)
+    up_name: Optional[str] = None  # 상위종목명
+    up_size_name: Optional[str] = None  # 상위사이즈명
+    company_class_name: Optional[str] = None  # 회사분류명 (외국기업 등)
+    order_warning: Optional[str] = None  # 주문경고 (0: 정상, 1: 경고 등)
+    nxt_enable: Optional[str] = None  # 다음조회여부 (Y/N)
+
+
+class StocksInfoCreate(StocksInfoBase):
+    """종목정보 생성"""
+    pass
+
+
+class StocksInfo(StocksInfoBase):
+    """종목정보 조회"""
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
