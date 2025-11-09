@@ -106,6 +106,140 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-09: 종목정보 자동 동기화 스케줄러 구현
+
+#### 기능 설명
+- **백엔드 파일**:
+  - `back/app/scheduler.py`: 스케줄러 및 동기화 작업 로직 신규 생성
+  - `back/main.py`: 스케줄러 초기화 및 API 엔드포인트 추가
+  - `back/requirements.txt`: APScheduler 의존성 추가
+
+#### 1. 스케줄러 구조 (back/app/scheduler.py)
+- **APScheduler**: 백그라운드 작업 관리
+- **실행 스케줄**:
+  - 월~금 아침 7:30 (한국 시간, KST)
+  - Cron 표현식: `hour='7', minute='30', day_of_week='0-4'`
+- **동기화 대상**:
+  - 코스피 (market_code='0')
+  - 코스닥 (market_code='10')
+
+#### 2. 동기화 작업 (sync_stocks_info_job)
+**동작 흐름**:
+1. 환경변수에서 키움 API 인증정보 로드
+   - `KIWOOM_APP_KEY`
+   - `KIWOOM_SECRET_KEY`
+2. 각 시장별로 종목정보 조회
+3. 데이터베이스에 저장/업데이트
+   - 신규 종목: INSERT
+   - 기존 종목: UPDATE
+4. 로그에 결과 기록
+
+**특징**:
+- 실시간 로깅으로 작업 진행 상황 추적
+- 중복 체크로 데이터 일관성 유지
+- 오류 시에도 다른 시장은 계속 처리
+- 데이터베이스 트랜잭션 관리
+
+#### 3. 애플리케이션 통합 (back/main.py)
+**Lifespan 이벤트**:
+```python
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: 스케줄러 시작
+    await database.connect()
+    start_scheduler()
+
+    yield
+
+    # Shutdown: 스케줄러 종료
+    stop_scheduler()
+    await database.disconnect()
+```
+
+#### 4. 스케줄러 API 엔드포인트
+- **GET `/api/scheduler/status`**: 스케줄러 상태 조회
+  - 응답:
+    ```json
+    {
+        "running": true,
+        "jobs": [
+            {
+                "id": "sync_stocks_info",
+                "name": "종목정보 자동 동기화",
+                "trigger": "cron[hour='7', minute='30', day_of_week='0-4']",
+                "next_run_time": "2025-11-10T07:30:00+09:00"
+            }
+        ]
+    }
+    ```
+
+- **POST `/api/scheduler/manual-sync`**: 종목정보 수동 동기화 (테스트용)
+  - 백그라운드에서 즉시 동기화 작업 실행
+  - 응답:
+    ```json
+    {
+        "status": "success",
+        "message": "종목정보 동기화 작업이 시작되었습니다. 로그를 확인해주세요."
+    }
+    ```
+
+#### 5. 환경변수 설정
+**필수 환경변수** (`.env` 파일에 추가):
+```bash
+KIWOOM_APP_KEY=your_app_key_here
+KIWOOM_SECRET_KEY=your_secret_key_here
+```
+
+#### 6. 로깅
+**스케줄러 로그 출력**:
+```
+================================================================================
+시작: 종목정보 자동 동기화 작업 (2025-11-10 07:30:00)
+================================================================================
+
+[코스피] 종목정보 조회 중...
+[코스피] 조회 종목 수: 2500
+[코스피] 동기화 완료: 추가=150, 업데이트=2350, 합계=2500
+
+[코스닥] 종목정보 조회 중...
+[코스닥] 조회 종목 수: 1800
+[코스닥] 동기화 완료: 추가=80, 업데이트=1720, 합계=1800
+
+================================================================================
+완료: 종목정보 자동 동기화 작업
+================================================================================
+```
+
+#### 7. 사용 예시
+```bash
+# 스케줄러 상태 확인
+curl -X GET http://localhost:8000/api/scheduler/status
+
+# 종목정보 수동 동기화 (테스트)
+curl -X POST http://localhost:8000/api/scheduler/manual-sync
+
+# 백엔드 로그 확인
+# PM2 로그: pm2 logs goni-backend
+# 또는: tail -f /var/log/goni-backend.log
+```
+
+#### 8. 주요 특징
+✅ 자동화된 스케줄링 (월~금 7:30)
+✅ 비동기 백그라운드 작업 (API 응답 지연 없음)
+✅ 실시간 로깅으로 작업 모니터링
+✅ 오류 처리 및 롤백 지원
+✅ 수동 동기화 API로 테스트 가능
+✅ 스케줄러 상태 조회 API
+
+#### 9. 배포 체크리스트
+- [ ] `KIWOOM_APP_KEY` 환경변수 설정
+- [ ] `KIWOOM_SECRET_KEY` 환경변수 설정
+- [ ] `requirements.txt`에서 `apscheduler==3.10.4` 확인
+- [ ] 백엔드 재시작 (PM2)
+- [ ] `/api/scheduler/status` 엔드포인트로 스케줄러 상태 확인
+- [ ] `/api/scheduler/manual-sync`로 동기화 테스트
+- [ ] 로그에서 동기화 성공 확인
+
 ### 2025-11-09: 키움증권 API ka10099 종목정보 조회 기능 추가
 
 #### 기능 설명

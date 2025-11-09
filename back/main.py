@@ -2,18 +2,28 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
+import logging
 
 from app.database import database
 from app.routers import auth, stocks, trading_plans, recap, trading, trading_stocks, stocks_info
+from app.scheduler import start_scheduler, stop_scheduler, get_scheduler_jobs, scheduler, sync_stocks_info_job
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     await database.connect()
+    # 스케줄러 시작
+    start_scheduler()
+    logger.info("애플리케이션 시작: 스케줄러 활성화")
     yield
     # Shutdown
+    # 스케줄러 종료
+    stop_scheduler()
     await database.disconnect()
+    logger.info("애플리케이션 종료: 스케줄러 비활성화")
 
 
 app = FastAPI(
@@ -52,6 +62,55 @@ app.include_router(recap.router)
 @app.get("/")
 async def root():
     return {"message": "Goni Trading API Server"}
+
+
+@app.get("/api/scheduler/status")
+async def get_scheduler_status():
+    """
+    스케줄러 상태 및 등록된 작업 조회
+
+    Returns:
+        dict: 스케줄러 상태
+        {
+            "running": true,
+            "jobs": [
+                {
+                    "id": "sync_stocks_info",
+                    "name": "종목정보 자동 동기화",
+                    "trigger": "cron[hour='7', minute='30', day_of_week='0-4']",
+                    "next_run_time": "2025-11-10T07:30:00+09:00"
+                }
+            ]
+        }
+    """
+    return {
+        "running": scheduler.running,
+        "jobs": get_scheduler_jobs(),
+    }
+
+
+@app.post("/api/scheduler/manual-sync")
+async def manual_sync_stocks_info():
+    """
+    종목정보 수동 동기화 (테스트용)
+
+    Returns:
+        dict: 동기화 작업 상태
+        {
+            "status": "success",
+            "message": "종목정보 동기화 작업이 시작되었습니다"
+        }
+    """
+    import threading
+
+    # 백그라운드 스레드에서 작업 실행
+    thread = threading.Thread(target=sync_stocks_info_job, daemon=True)
+    thread.start()
+
+    return {
+        "status": "success",
+        "message": "종목정보 동기화 작업이 시작되었습니다. 로그를 확인해주세요.",
+    }
 
 
 if __name__ == "__main__":
