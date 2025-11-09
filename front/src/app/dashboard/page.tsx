@@ -45,6 +45,7 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false)
   const [mode, setMode] = useState<Mode>('review')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedTradingPlanId, setSelectedTradingPlanId] = useState<number | null>(null)
   const [selectedTradingId, setSelectedTradingId] = useState<number | null>(null)
   const [selectedOrderNo, setSelectedOrderNo] = useState<string | undefined>(undefined)
@@ -52,7 +53,12 @@ export default function DashboardPage() {
   const [selectedStockCode, setSelectedStockCode] = useState<string | undefined>(undefined)
 
   // 매매 종목 데이터 조회 (계획 모드용)
-  const { data: stocks = [], isLoading: isLoadingStocks, error: stocksError } = useQuery({
+  const {
+    data: stocks = [],
+    isLoading: isLoadingStocks,
+    error: stocksError,
+    refetch: refetchStocks
+  } = useQuery({
     queryKey: ['tradingStocks'],
     queryFn: fetchTradingStocks,
     refetchInterval: 60000, // 1분마다 갱신
@@ -60,7 +66,12 @@ export default function DashboardPage() {
   })
 
   // 실제 매매 내역 조회 (복기 모드용)
-  const { data: tradesData, isLoading: isLoadingTrades, error: tradesError } = useQuery({
+  const {
+    data: tradesData,
+    isLoading: isLoadingTrades,
+    error: tradesError,
+    refetch: refetchTrades
+  } = useQuery({
     queryKey: ['recentTrades'],
     queryFn: fetchRecentTrades,
     refetchInterval: 300000, // 5분마다 갱신
@@ -107,9 +118,23 @@ export default function DashboardPage() {
     setMode(newMode)
   }
 
-  const handleRefresh = () => {
-    // TODO: Implement refresh functionality
-    console.log('새로고침')
+  const handleRefresh = async () => {
+    // 이미 새로고침 중이면 중복 클릭 방지
+    if (isRefreshing) return
+
+    setIsRefreshing(true)
+    try {
+      // 현재 모드에 따라 데이터 새로고침
+      if (mode === 'plan') {
+        await refetchStocks()
+      } else {
+        await refetchTrades()
+      }
+    } catch (error) {
+      console.error('데이터 새로고침 실패:', error)
+    } finally {
+      setIsRefreshing(false)
+    }
   }
 
   const handleAddStock = () => {
@@ -174,6 +199,7 @@ export default function DashboardPage() {
         onRefresh={handleRefresh}
         onAddStock={handleAddStock}
         onStrategyManage={handleStrategyManage}
+        isRefreshing={isRefreshing}
       />
 
       {/* Main Content */}

@@ -11,6 +11,7 @@ interface HeaderProps {
   onRefresh: () => void
   onAddStock: () => void
   onStrategyManage: () => void
+  isRefreshing?: boolean
 }
 
 export default function Header({
@@ -18,7 +19,8 @@ export default function Header({
   onModeChange,
   onRefresh,
   onAddStock,
-  onStrategyManage
+  onStrategyManage,
+  isRefreshing = false
 }: HeaderProps) {
   const router = useRouter()
   const today = new Date().toLocaleDateString('ko-KR', {
@@ -88,10 +90,15 @@ export default function Header({
 
               <button
                 onClick={onRefresh}
-                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
+                disabled={isRefreshing}
+                className={`px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors ${
+                  isRefreshing
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
               >
-                <RefreshCw className="h-4 w-4" />
-                <span>새로고침</span>
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? '새로고침 중...' : '새로고침'}</span>
               </button>
 
               <button
