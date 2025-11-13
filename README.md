@@ -106,6 +106,142 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-13: 계획 모드 매매 계획 입력창 초기화 기능 추가
+
+#### 문제 상황
+- 새로운 종목의 매매 계획 입력창 클릭 시, 이전 종목에서 입력했던 값이 그대로 남아있음
+- 사용자가 다른 종목으로 변경해도 입력 필드의 값이 초기화되지 않아 혼동 발생
+
+#### 해결 방법
+- **파일**: `front/src/components/trading-plan-form-modal.tsx`
+- **변경 사항**:
+  - 새로운 `useEffect` 훅 추가 (의존성: `[isOpen, stockCode]`)
+  - 모달이 열리거나 종목(stockCode)이 변경될 때 자동으로 모든 입력 필드 초기화
+  - 초기화 항목:
+    - 매수 계획: 가격, 수량, 금액, 조건, 이유, 익절가, 익절률, 손절가, 손절률
+    - 매도 계획: 가격, 비중, 수량, 조건, 이유
+    - 거래 종류: 매수로 리셋
+
+#### 동작 흐름
+1. 사용자가 종목 카드 클릭 → 모달 열림
+2. `useEffect` 훅이 `isOpen=true`와 `stockCode` 변경 감지
+3. 모든 입력 필드 상태값 초기화 (`''` 또는 기본값)
+4. 차트와 보유 종목 데이터는 별도의 쿼리로 로딩
+5. 사용자가 깨끗한 입력창에서 새 종목의 계획 수립
+
+#### 주요 개선사항
+✅ 다른 종목 선택 시 이전 입력값 자동 제거
+✅ 불필요한 사용자 수동 초기화 작업 제거
+✅ 입력 필드의 데이터 격리 보장 (종목별 독립적 관리)
+✅ 사용자 경험 향상
+
+### 2025-11-12: 계획 모드 종목 추가 기능 완전 수정
+
+#### 1. 계획 모드 종목 추가 버그 수정 (front/src/components/stock-search-modal.tsx)
+
+**문제 상황**:
+- 종목 검색으로 추가: 되는 상태
+- 보유 종목으로 추가: 안 되는 상태
+- 원인: 백엔드 `addFromOwned` API가 TradingStock 테이블을 기준으로만 확인
+
+**최종 해결 방법**:
+
+##### 검색 결과 추가 (이미 수정됨)
+```typescript
+// stock-search-modal.tsx: handleAddSelectedStocks()
+const stockCodesToAdd = selectedStocksList.map(stock => stock.code)
+await tradingPlansAPI.addFromOwned(stockCodesToAdd)
+// → trading_plans 테이블에 저장
+```
+
+##### 보유 종목 추가 (새로 수정됨)
+```typescript
+// stock-search-modal.tsx: handleAddSelectedStocksFromOwned()
+const selectedOwnedStocks = ownedStocks.filter(stock =>
+  stockCodesToAdd.includes(stock.stock_code)
+)
+// 각 종목별로 개별 호출
+await Promise.all(
+  selectedOwnedStocks.map(stock =>
+    tradingPlansAPI.addFromOwned([stock.stock_code])
+  )
+)
+```
+
+**개선 사항**:
+- ✅ 종목 검색으로 추가: trading_plans 테이블에 저장 + 대시보드에 표시
+- ✅ 보유 종목으로 추가: trading_plans 테이블에 저장 + 대시보드에 표시
+- ✅ 두 가지 방식 모두 동일한 로직 사용 (안정성 향상)
+
+#### 2. 백엔드 포트 설정 개선
+
+**문제 상황**:
+- 모바일 및 외부 IP에서 백엔드 API 접속 불가 (127.0.0.1:8000으로만 listen)
+- 로그인 시 네트워크 연결 오류 발생
+
+**해결 방법**:
+- `back/main.py` 수정
+  - `reload=True` 제거 (프로덕션 환경에서는 불필요)
+  - `host="0.0.0.0"` 명시 (모든 인터페이스에서 listen)
+- `ecosystem.config.js` 설정 유지 (interpreter 방식)
+- `apscheduler` 패키지 설치 (스케줄러 의존성)
+
+**결과**:
+- ✅ 포트 0.0.0.0:8000에서 listen
+- ✅ 모바일 및 외부 IP에서 정상 접속 가능
+- ✅ 로그인 성공
+
+#### 3. 프론트엔드 API URL 설정 (front/.env.local)
+
+**설정**:
+```
+BACKEND_URL=http://localhost:8000          # 서버사이드 (rewrites 용)
+NEXT_PUBLIC_API_URL=http://3.34.102.218:8000  # 클라이언트사이드 (모바일 접속 용)
+```
+
+**동작 방식**:
+- localhost:3001 접속 → localhost:8000으로 요청
+- 3.34.102.218:3001 접속 → 3.34.102.218:8000으로 요청
+
+### 2025-11-12: Next.js 설정 및 모바일 접속 문제 해결
+
+#### 1. Next.js 설정 문제 해결 (allowedDevOrigins 제거)
+- **문제**: `next dev` 실행 시 경고 메시지 출력
+  ```
+  ⚠ Invalid next.config.js options detected:
+  ⚠     Unrecognized key(s) in object: 'allowedDevOrigins' at "experimental"
+  ```
+- **원인**: Next.js 15.5.3에서 `allowedDevOrigins`는 유효하지 않은 실험적 옵션
+- **해결**: `front/next.config.js`에서 제거
+- **결과**: 개발 서버 시작 시 경고 메시지 제거
+
+#### 2. 모바일 접속 문제 해결 (API URL 명시)
+
+**문제 상황**:
+- 모바일에서 서버 IP(3.34.102.218)로 접속 불가능
+- 원인: Next.js rewrites는 서버사이드에서만 동작
+- 클라이언트의 상대경로 요청이 잘못된 주소로 해석됨
+
+**해결 방법**:
+- **파일**: `front/.env.local`
+  - `NEXT_PUBLIC_API_URL=http://3.34.102.218:8000` 설정
+  - 클라이언트 사이드 API 요청이 명시적 URL을 사용하도록 수정
+- **파일**: `front/src/lib/api.ts`
+  - 클라이언트 사이드: `NEXT_PUBLIC_API_URL` 사용 (모바일 외부 접속 지원)
+  - 서버 사이드: `BACKEND_URL` 사용 (localhost에서 직접 호출)
+
+**동작 방식**:
+- localhost:3001 접속 (개발): API 요청 → localhost:8000 (rewrites 또는 상대경로)
+- 모바일 3.34.102.218:3001 접속: API 요청 → 3.34.102.218:8000 (NEXT_PUBLIC_API_URL)
+- 프로덕션 3.34.102.218:3000 접속: API 요청 → 3.34.102.218:8000 (상대경로 또는 NEXT_PUBLIC_API_URL)
+
+**배포 후 테스트**:
+```bash
+# 모바일 또는 다른 PC에서 접속
+http://3.34.102.218:3001  (개발 서버)
+http://3.34.102.218:3000  (프로덕션)
+```
+
 ### 2025-11-09: 종목정보 자동 동기화 스케줄러 구현
 
 #### 기능 설명
