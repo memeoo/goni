@@ -106,6 +106,405 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-14: 알고리즘 DB 테이블 및 추천 페이지 구현
+
+#### 신기능: 알고리즘 종목 추천 시스템
+
+**목적**: 매일 아침 7시에 Goni 퀀트 알고리즘에 의해 자동으로 추천되는 종목을 관리하고 표시
+
+**구현 내용**:
+
+1. **Database Schema**:
+   - `algorithm` 테이블 생성 (name, description, created_at, updated_at)
+   - 각 알고리즘은 이름과 설명을 포함하여 관리
+
+2. **Backend API**:
+   - 신규 라우터: `back/app/routers/algorithm.py`
+   - 엔드포인트: `GET /api/algorithms` - 전체 알고리즘 목록 조회
+   - 응답 형식: `{ data: [], total: number, skip: number, limit: number }`
+
+3. **Frontend UI**:
+   - 신규 페이지: `/recommendation` - 알고리즘 추천 종목 대시보드
+   - 신규 컴포넌트: `algorithm-card.tsx` - 개별 알고리즘 카드 표시
+   - 기능:
+     - 알고리즘 이름, 설명, 생성일 표시
+     - 반응형 그리드 레이아웃 (모바일/태블릿/데스크톱)
+     - 로딩/에러 상태 처리
+
+4. **Navigation**:
+   - 헤더의 "전략 관리" 버튼을 "추천"으로 변경
+   - 버튼 클릭 시 `/recommendation` 페이지로 이동
+
+**파일 변경**:
+- ✅ `back/app/models.py`: `Algorithm` 모델 추가
+- ✅ `back/app/routers/algorithm.py`: 신규 라우터 생성
+- ✅ `back/main.py`: 알고리즘 라우터 등록
+- ✅ `front/src/app/recommendation/page.tsx`: 신규 추천 페이지
+- ✅ `front/src/components/algorithm-card.tsx`: 신규 알고리즘 카드 컴포넌트
+- ✅ `front/src/components/header.tsx`: "전략 관리" → "추천" 텍스트 변경
+- ✅ `front/src/app/dashboard/page.tsx`: 헤더 버튼 네비게이션 수정
+
+---
+
+### 2025-11-13: 매매 계획 입력 후 저장 기능 구현 및 테이블 분리 (trading_plans → trading_plans + trading_plans_history)
+
+#### 아키텍처 개선: 테이블 분리 구조
+
+계획 모드 대시보드에서 관리하는 종목 목록과 실제 매매 계획 데이터를 분리하기 위해 테이블을 2개로 분할:
+
+**이전 구조** (단일 테이블):
+```
+trading_plans: 모든 정보를 한 테이블에 저장
+├── 종목 정보 (stock_code, stock_name)
+└── 매매 계획 정보 (trading_type, condition, target_price, ...)
+```
+
+**신규 구조** (2-테이블):
+```
+trading_plans: 계획 모드 대시보드용 (가벼운 테이블)
+├── id, user_id, stock_code, stock_name, created_at, updated_at
+
+trading_plans_history: 실제 매매 계획 데이터
+├── id, trading_plan_id (FK), trading_type, condition, target_price, ...
+└── 각 종목별로 여러 버전의 계획 관리 가능
+```
+
+#### 1. 데이터베이스 스키마 분리
+
+**trading_plans 테이블** (계획 모드 종목 목록):
+```sql
+CREATE TABLE trading_plans (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    stock_code VARCHAR(10) NOT NULL,
+    stock_name VARCHAR(100),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+**trading_plans_history 테이블** (실제 매매 계획 데이터):
+```sql
+CREATE TABLE trading_plans_history (
+    id SERIAL PRIMARY KEY,
+    trading_plan_id INTEGER NOT NULL REFERENCES trading_plans(id) ON DELETE CASCADE,
+
+    -- 매매 종류 및 조건
+    trading_type VARCHAR(10) NOT NULL CHECK (trading_type IN ('buy', 'sell')),
+    condition TEXT,
+
+    -- 매매 계획 가격 및 금액
+    target_price DECIMAL(12,2),
+    amount BIGINT,
+
+    -- 매매 이유
+    reason TEXT,
+
+    -- 매도 계획 비중 (매도일 때만)
+    proportion DECIMAL(5,2),
+
+    -- 익절(Stop Profit) 설정
+    sp_condition TEXT,
+    sp_price DECIMAL(12,2),
+    sp_ratio DECIMAL(5,2),
+
+    -- 손절(Stop Loss) 설정
+    sl_condition TEXT,
+    sl_price DECIMAL(12,2),
+    sl_ratio DECIMAL(5,2),
+
+    -- 시스템 정보
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+**마이그레이션 파일**: `back/update_trading_plans_split_schema.sql`
+
+#### 2. 백엔드 모델 업데이트 (back/app/models.py)
+
+**TradingPlan 모델** (간소화됨):
+```python
+class TradingPlan(Base):
+    __tablename__ = "trading_plans"
+
+    id = sa.Column(sa.Integer, primary_key=True, index=True)
+    user_id = sa.Column(sa.Integer, sa.ForeignKey("users.id"), nullable=False, index=True)
+
+    # 종목 정보
+    stock_code = sa.Column(sa.String, nullable=False, index=True)
+    stock_name = sa.Column(sa.String, nullable=True)
+
+    # 시스템 정보
+    created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
+    updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 관계
+    user = relationship("User", back_populates="trading_plans")
+    histories = relationship("TradingPlanHistory", back_populates="trading_plan")
+```
+
+**TradingPlanHistory 모델** (신규):
+```python
+class TradingPlanHistory(Base):
+    __tablename__ = "trading_plans_history"
+
+    id = sa.Column(sa.Integer, primary_key=True, index=True)
+    trading_plan_id = sa.Column(sa.Integer, sa.ForeignKey("trading_plans.id"), nullable=False, index=True)
+
+    # 매매 정보
+    trading_type = sa.Column(sa.String, nullable=False)
+    condition = sa.Column(sa.Text, nullable=True)
+    target_price = sa.Column(sa.Float, nullable=True)
+    amount = sa.Column(sa.BigInteger, nullable=True)
+    reason = sa.Column(sa.Text, nullable=True)
+    proportion = sa.Column(sa.Float, nullable=True)
+
+    # 익절/손절 설정
+    sp_condition = sa.Column(sa.Text, nullable=True)
+    sp_price = sa.Column(sa.Float, nullable=True)
+    sp_ratio = sa.Column(sa.Float, nullable=True)
+    sl_condition = sa.Column(sa.Text, nullable=True)
+    sl_price = sa.Column(sa.Float, nullable=True)
+    sl_ratio = sa.Column(sa.Float, nullable=True)
+
+    # 시스템 정보
+    created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
+    updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 관계
+    trading_plan = relationship("TradingPlan", back_populates="histories")
+```
+
+#### 3. 스키마 업데이트 (back/app/schemas.py)
+
+**TradingPlan 스키마** (간소화):
+```python
+class TradingPlanBase(BaseModel):
+    stock_code: str
+    stock_name: Optional[str] = None
+
+class TradingPlan(TradingPlanBase):
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+```
+
+**TradingPlanHistory 스키마** (신규):
+```python
+class TradingPlanHistoryBase(BaseModel):
+    trading_type: str
+    condition: Optional[str] = None
+    target_price: Optional[float] = None
+    amount: Optional[int] = None
+    reason: Optional[str] = None
+    proportion: Optional[float] = None
+    sp_condition: Optional[str] = None
+    sp_price: Optional[float] = None
+    sp_ratio: Optional[float] = None
+    sl_condition: Optional[str] = None
+    sl_price: Optional[float] = None
+    sl_ratio: Optional[float] = None
+
+class TradingPlanHistory(TradingPlanHistoryBase):
+    id: int
+    trading_plan_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+```
+
+#### 4. API 엔드포인트 (back/app/routers/trading_plans.py)
+
+**POST `/api/trading-plans`**: 매매 계획 저장 (TradingPlan + TradingPlanHistory 동시 생성)
+
+- 요청 본문:
+```json
+{
+  "stock_code": "005930",
+  "stock_name": "삼성전자",
+  "trading_type": "buy",
+  "condition": "20일 이동평균선 지지 시",
+  "target_price": 70500,
+  "amount": 705000,
+  "reason": "긍정적인 뉴스 + 기술적 지지",
+  "sp_condition": "3% 수익",
+  "sp_price": 72655,
+  "sp_ratio": 3.0,
+  "sl_condition": "-2% 손실",
+  "sl_price": 69090,
+  "sl_ratio": -2.0
+}
+```
+
+- 응답 (TradingPlanHistory 스키마):
+```json
+{
+  "id": 1,
+  "trading_plan_id": 1,
+  "trading_type": "buy",
+  "condition": "20일 이동평균선 지지 시",
+  "target_price": 70500,
+  "amount": 705000,
+  "reason": "긍정적인 뉴스 + 기술적 지지",
+  "proportion": null,
+  "sp_condition": "3% 수익",
+  "sp_price": 72655,
+  "sp_ratio": 3.0,
+  "sl_condition": "-2% 손실",
+  "sl_price": 69090,
+  "sl_ratio": -2.0,
+  "created_at": "2025-11-13T14:26:56Z",
+  "updated_at": "2025-11-13T14:26:56Z"
+}
+```
+
+**저장 프로세스**:
+1. TradingPlan 레코드 생성 (또는 기존 것 사용): user_id + stock_code 기반
+2. TradingPlanHistory 레코드 생성: 실제 매매 계획 데이터 저장
+3. CASCADE 삭제 설정: TradingPlan 삭제 시 관련 TradingPlanHistory도 자동 삭제
+
+#### 5. 프론트엔드 API 함수 추가 (front/src/lib/api.ts)
+
+**tradingPlansAPI.saveTradingPlan(planData)**:
+```typescript
+saveTradingPlan: (planData: any) =>
+  api.post('/api/trading-plans', planData)
+```
+
+#### 6. 프론트엔드 저장 기능 구현 (front/src/components/trading-plan-form-modal.tsx)
+
+**handleSave 함수 구현**:
+- 입력값 유효성 검증
+- 매매 종류(buy/sell)에 따라 필요한 필드만 추출
+- `tradingPlansAPI.saveTradingPlan()` 호출
+- 성공 시 모달 닫기 및 알림 표시
+- 오류 시 에러 메시지 표시
+
+**저장 플로우**:
+1. 사용자가 매매 계획 입력 (가격, 수량, 조건, 이유 등)
+2. 저장 버튼 클릭
+3. 입력값 검증
+4. 백엔드 API 호출 (POST /api/trading-plans)
+5. 저장 성공 → 모달 닫기 및 성공 알림
+6. 저장 실패 → 에러 메시지 표시
+
+**매수 계획 저장 데이터**:
+```javascript
+{
+  stock_code: "005930",
+  stock_name: "삼성전자",
+  trading_type: "buy",
+  condition: "매수 조건 입력",
+  target_price: 70500,
+  amount: 705000,
+  reason: "매수 이유 입력",
+  sp_condition: "익절 조건",
+  sp_price: 72655,
+  sp_ratio: 3.0,
+  sl_condition: "손절 조건",
+  sl_price: 69090,
+  sl_ratio: -2.0
+}
+```
+
+**매도 계획 저장 데이터**:
+```javascript
+{
+  stock_code: "005930",
+  stock_name: "삼성전자",
+  trading_type: "sell",
+  condition: "매도 조건 입력",
+  target_price: 75000,
+  reason: "매도 이유 입력",
+  proportion: 50
+}
+```
+
+#### 7. 주요 개선사항
+
+✅ **구조 개선**:
+- TradingPlan 테이블을 계획 저장만을 위해 정리
+- 실제 매매 실행은 Trading/TradingHistory 테이블에서 관리
+- 복기는 Recap 테이블에서 독립적으로 관리
+- 테이블 간 역할 분리로 데이터 정합성 향상
+
+✅ **필드 개선**:
+- stock_id → stock_code (Foreign Key 필요 없음)
+- quantity 삭제 (amount로 통합 관리)
+- 익절/손절 설정을 체계적으로 구조화
+
+✅ **UI/UX 개선**:
+- 매수/매도 구분에 따라 필드 동적 표시
+- 가격과 수익률 자동 계산
+- 익절/손절 계획 섹션 분리
+- 보유 여부에 따라 매도 버튼 활성/비활성
+
+#### 8. 마이그레이션 방법
+
+```bash
+# PostgreSQL 접속
+psql -U goniadmin -d goni -h localhost
+
+# SQL 실행
+\i /home/ubuntu/goni/back/update_trading_plans_schema.sql
+
+# 또는 명령줄에서
+psql -U goniadmin -d goni -h localhost -f /home/ubuntu/goni/back/update_trading_plans_schema.sql
+```
+
+#### 9. 테스트 방법
+
+**API 테스트**:
+```bash
+curl -X POST http://localhost:8000/api/trading-plans \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {token}" \
+  -d '{
+    "stock_code": "005930",
+    "stock_name": "삼성전자",
+    "trading_type": "buy",
+    "condition": "20일 이동평균선 지지",
+    "target_price": 70500,
+    "amount": 705000,
+    "reason": "좋은 진입점",
+    "sp_condition": "3% 수익",
+    "sp_price": 72655,
+    "sp_ratio": 3.0,
+    "sl_condition": "-2% 손실",
+    "sl_price": 69090,
+    "sl_ratio": -2.0
+  }'
+```
+
+**프론트엔드 테스트**:
+1. 계획 모드에서 종목 카드 클릭
+2. 매매 계획 입력 모달 열기
+3. 매수/매도 선택
+4. 필요한 필드 입력
+5. 저장 버튼 클릭
+6. 성공 메시지 확인
+
+#### 10. 주의사항
+
+⚠️ **기존 데이터 손실**:
+- 기존 TradingPlan 테이블의 데이터가 삭제됨
+- 마이그레이션 전에 필요한 데이터는 백업할 것
+
+⚠️ **스키마 변경 후 재시작**:
+- 백엔드 서버 재시작 필수
+- PM2: `pm2 restart goni-backend`
+
+⚠️ **클라이언트 캐시 정리**:
+- 브라우저 개발자 도구에서 캐시 정리
+- 또는 프라이빗 모드에서 테스트
+
 ### 2025-11-13: 계획 모드 매매 계획 입력창 초기화 기능 추가
 
 #### 문제 상황

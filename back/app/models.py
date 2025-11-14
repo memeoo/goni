@@ -20,7 +20,7 @@ class User(Base):
 
 class Stock(Base):
     __tablename__ = "stocks"
-    
+
     id = sa.Column(sa.Integer, primary_key=True, index=True)
     symbol = sa.Column(sa.String, unique=True, index=True)  # 종목 코드
     name = sa.Column(sa.String)  # 종목명
@@ -29,39 +29,61 @@ class Stock(Base):
     change_rate = sa.Column(sa.Float)
     volume = sa.Column(sa.BigInteger)
     updated_at = sa.Column(sa.DateTime, default=datetime.utcnow)
-    
-    trading_plans = relationship("TradingPlan", back_populates="stock")
 
 
 class TradingPlan(Base):
     __tablename__ = "trading_plans"
 
     id = sa.Column(sa.Integer, primary_key=True, index=True)
-    user_id = sa.Column(sa.Integer, sa.ForeignKey("users.id"))
-    stock_id = sa.Column(sa.Integer, sa.ForeignKey("stocks.id"))
+    user_id = sa.Column(sa.Integer, sa.ForeignKey("users.id"), nullable=False, index=True)
 
-    # 매매 계획
-    plan_type = sa.Column(sa.String)  # 'buy' or 'sell'
-    target_price = sa.Column(sa.Float)
-    quantity = sa.Column(sa.Integer)
-    reason = sa.Column(sa.Text)  # 매매 이유
+    # 종목 정보
+    stock_code = sa.Column(sa.String, nullable=False, index=True)  # 종목코드
+    stock_name = sa.Column(sa.String, nullable=True)  # 종목명
 
-    # 실제 매매 결과
-    executed_price = sa.Column(sa.Float, nullable=True)
-    executed_quantity = sa.Column(sa.Integer, nullable=True)
-    executed_at = sa.Column(sa.DateTime, nullable=True)
-
-    # 복기
-    review = sa.Column(sa.Text, nullable=True)  # 복기 내용
-    profit_loss = sa.Column(sa.Float, nullable=True)  # 수익/손실
-
-    status = sa.Column(sa.String, default="planned")  # planned, executed, reviewed
+    # 시스템 정보
     created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
     updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="trading_plans")
-    stock = relationship("Stock", back_populates="trading_plans")
-    recap = relationship("Recap", back_populates="trading_plan", uselist=False)
+    histories = relationship("TradingPlanHistory", back_populates="trading_plan")
+
+
+class TradingPlanHistory(Base):
+    __tablename__ = "trading_plans_history"
+
+    id = sa.Column(sa.Integer, primary_key=True, index=True)
+    trading_plan_id = sa.Column(sa.Integer, sa.ForeignKey("trading_plans.id"), nullable=False, index=True)
+
+    # 매매 종류 및 조건
+    trading_type = sa.Column(sa.String, nullable=False)  # 'buy' or 'sell'
+    condition = sa.Column(sa.Text, nullable=True)  # 매매 조건 (사용자 입력)
+
+    # 매매 계획 가격 및 금액
+    target_price = sa.Column(sa.Float, nullable=True)  # 매매 계획 가격
+    amount = sa.Column(sa.BigInteger, nullable=True)  # 매매 금액
+
+    # 매매 이유
+    reason = sa.Column(sa.Text, nullable=True)  # 매매 이유
+
+    # 매도 계획 비중 (매도일 때만)
+    proportion = sa.Column(sa.Float, nullable=True)  # 매도 비중 (%)
+
+    # 익절(Stop Profit) 설정
+    sp_condition = sa.Column(sa.Text, nullable=True)  # 익절 조건
+    sp_price = sa.Column(sa.Float, nullable=True)  # 익절 가격
+    sp_ratio = sa.Column(sa.Float, nullable=True)  # 익절 수익률 (%)
+
+    # 손절(Stop Loss) 설정
+    sl_condition = sa.Column(sa.Text, nullable=True)  # 손절 조건
+    sl_price = sa.Column(sa.Float, nullable=True)  # 손절 가격
+    sl_ratio = sa.Column(sa.Float, nullable=True)  # 손절 수익률 (%)
+
+    # 시스템 정보
+    created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
+    updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    trading_plan = relationship("TradingPlan", back_populates="histories")
 
 
 class TradingStock(Base):
@@ -72,6 +94,7 @@ class TradingStock(Base):
     stock_code = sa.Column(sa.String, unique=True, nullable=False, index=True)  # 종목코드
     is_downloaded = sa.Column(sa.Boolean, default=False)  # 다운로드 여부
     latest_orderno = sa.Column(sa.String, nullable=True)  # 최근 거래의 주문번호 (마지막으로 동기화된 거래)
+    reg_type = sa.Column(sa.String, default='manual')  # 등록 방식 ('api': API 동기화, 'manual': 수동 등록)
 
     # 계좌평가현황에서 가져온 정보
     avg_prc = sa.Column(sa.Float, nullable=True)  # 평균단가
@@ -162,5 +185,16 @@ class Recap(Base):
     updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User")
-    trading_plan = relationship("TradingPlan", back_populates="recap")
     trading = relationship("TradingHistory")
+
+
+class Algorithm(Base):
+    __tablename__ = "algorithm"
+
+    id = sa.Column(sa.Integer, primary_key=True, index=True)
+    name = sa.Column(sa.String, nullable=False)  # 알고리즘 이름
+    description = sa.Column(sa.Text, nullable=True)  # 알고리즘 설명
+
+    # 시스템 정보
+    created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
+    updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
