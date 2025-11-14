@@ -131,9 +131,11 @@ python main.py
      - 반응형 그리드 레이아웃 (모바일/태블릿/데스크톱)
      - 로딩/에러 상태 처리
 
-4. **Navigation**:
-   - 헤더의 "전략 관리" 버튼을 "추천"으로 변경
-   - 버튼 클릭 시 `/recommendation` 페이지로 이동
+4. **Navigation (동적 토글)**:
+   - 대시보드 페이지: "추천" 버튼 표시 (→ 추천 페이지로 이동)
+   - 추천 페이지: "계획/복기" 버튼 표시 (→ 대시보드로 복귀)
+   - 추천 페이지에서는 계획/복기 모드 토글 버튼 숨김
+   - `usePathname()` 훅으로 현재 경로 감지하여 동적 렌더링
 
 **파일 변경**:
 - ✅ `back/app/models.py`: `Algorithm` 모델 추가
@@ -141,7 +143,7 @@ python main.py
 - ✅ `back/main.py`: 알고리즘 라우터 등록
 - ✅ `front/src/app/recommendation/page.tsx`: 신규 추천 페이지
 - ✅ `front/src/components/algorithm-card.tsx`: 신규 알고리즘 카드 컴포넌트
-- ✅ `front/src/components/header.tsx`: "전략 관리" → "추천" 텍스트 변경
+- ✅ `front/src/components/header.tsx`: 동적 버튼 토글 기능 추가 (경로 기반 렌더링)
 - ✅ `front/src/app/dashboard/page.tsx`: 헤더 버튼 네비게이션 수정
 
 ---
