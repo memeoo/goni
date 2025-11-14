@@ -105,7 +105,6 @@ const formatTradeDateTime = (datetimeStr: string | number): string => {
     const mins = String(date.getMinutes()).padStart(2, '0')
     return `${yy}.${mm}.${dd}일 ${hh}:${mins}`
   } catch (error) {
-    console.warn('[formatTradeDateTime] Error formatting:', datetimeStr, error)
     return datetimeStr?.toString() || '-'
   }
 }
@@ -314,11 +313,13 @@ export default function DailyChart({ stockCode, data, trades, avgPrice, onHovere
 
     // 거래 마커 그리기
     if (trades && trades.length > 0) {
-      console.log('[DailyChart] Drawing trade markers:', {
+      console.log('[DailyChart] 거래 마커 렌더링 시작:', {
         tradesCount: trades.length,
         chartDataLength: chartData.length,
-        firstTrade: trades[0],
-        sampleChartDates: chartData.slice(0, 3).map((d) => d.date),
+        chartDateRange: {
+          first: chartData[0]?.date,
+          last: chartData[chartData.length - 1]?.date,
+        },
       })
 
       trades.forEach((trade, idx) => {
@@ -328,13 +329,8 @@ export default function DailyChart({ stockCode, data, trades, avgPrice, onHovere
         // 차트 데이터에서 해당 날짜의 봉 찾기
         const candleIndex = chartData.findIndex((c) => c.date === tradeDateFormatted)
 
-        if (idx === 0) {
-          console.log('[DailyChart] First trade match attempt:', {
-            tradeDate: trade.date,
-            tradeDateFormatted,
-            candleIndex,
-            found: candleIndex >= 0,
-          })
+        if (idx === 0 || candleIndex < 0) {
+          console.log(`[DailyChart] 거래 ${idx + 1}: 원본=${trade.date}, 변환=${tradeDateFormatted}, 찾음=${candleIndex >= 0}`)
         }
 
         if (candleIndex >= 0 && candleIndex < chartData.length) {
@@ -568,14 +564,6 @@ export default function DailyChart({ stockCode, data, trades, avgPrice, onHovere
           const distance = Math.sqrt((clickX - textX) ** 2 + (clickY - textY) ** 2)
 
           if (distance <= circleRadius) {
-            // 첫 번째 호버 시에만 로깅 (과도한 로깅 방지)
-            if (idx === 0) {
-              console.log('[DailyChart] Trade datetime format:', {
-                datetime: trade.datetime,
-                type: typeof trade.datetime,
-                formatted: formatTradeDateTime(trade.datetime),
-              })
-            }
             hoverTooltip = {
               trade,
               x: rect.left + x,

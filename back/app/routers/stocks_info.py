@@ -6,6 +6,8 @@ stocks_info 테이블에 저장/조회합니다.
 """
 
 import logging
+import sys
+from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -15,6 +17,10 @@ from app.database import get_db
 from app.models import StocksInfo, User
 from app.schemas import StocksInfo as StocksInfoSchema, StocksInfoCreate
 from app.routers.auth import get_current_user
+
+# 부모 디렉토리를 path에 추가 (analyze 모듈 임포트를 위해)
+sys.path.insert(0, '/home/ubuntu/goni')
+
 from analyze.lib.kiwoom import KiwoomAPI
 
 logger = logging.getLogger(__name__)

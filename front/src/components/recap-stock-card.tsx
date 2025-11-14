@@ -24,9 +24,9 @@ export default function RecapStockCard({ stock, onClick }: RecapStockCardProps) 
   // Empty card when no stock data
   if (!stock) {
     return (
-      <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-6 min-h-[180px] flex flex-col items-center justify-center hover:border-gray-400 transition-colors">
-        <FileText className="h-12 w-12 text-gray-400 mb-2" />
-        <p className="text-gray-500 text-sm">종목이 없습니다</p>
+      <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-2 sm:p-6 min-h-[90px] sm:min-h-[180px] flex flex-col items-center justify-center hover:border-gray-400 transition-colors">
+        <FileText className="h-8 sm:h-12 w-8 sm:w-12 text-gray-400 mb-1 sm:mb-2" />
+        <p className="text-gray-500 text-xs sm:text-sm">종목이 없습니다</p>
       </div>
     )
   }
@@ -54,30 +54,27 @@ export default function RecapStockCard({ stock, onClick }: RecapStockCardProps) 
 
   return (
     <div
-      className="bg-white border-2 border-gray-200 rounded-lg p-4 min-h-[180px] hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between group"
+      className="bg-white border-2 border-gray-200 rounded-lg p-2 sm:p-4 min-h-[90px] sm:min-h-[180px] hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between group"
       onClick={() => onClick?.(stock)}
     >
       {/* Stock Info */}
-      <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+      <h3 className="text-sm sm:text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">
         {stock.stock_name}
       </h3>
 
       {/* Recent Trades */}
       {stock.recent_trades && stock.recent_trades.length > 0 && (
-        <div className="space-y-1 mt-3 pt-3 border-t border-gray-200">
-          {stock.recent_trades.slice(0, 3).map((trade, index) => (
-            <div key={index} className="text-xs flex justify-between items-center">
-              <span className={`font-semibold ${getTradeColor(trade.trade_type)}`}>
+        <div className="space-y-0.5 sm:space-y-1 mt-1 sm:mt-3 pt-1 sm:pt-3 border-t border-gray-200">
+          {stock.recent_trades.slice(0, 2).map((trade, index) => (
+            <div key={index} className="text-2xs sm:text-xs flex justify-between items-center gap-1">
+              <span className={`font-semibold whitespace-nowrap ${getTradeColor(trade.trade_type)}`}>
                 {getTradeLabel(trade.trade_type)}
               </span>
-              <span className="text-gray-700">
+              <span className="text-gray-700 text-right truncate">
                 {trade.executed_price.toLocaleString()}원
               </span>
-              <span className="text-gray-600">
+              <span className="text-gray-600 whitespace-nowrap">
                 {trade.executed_quantity}주
-              </span>
-              <span className="text-gray-500">
-                {formatDate(trade.executed_at)}
               </span>
             </div>
           ))}

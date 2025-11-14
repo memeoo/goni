@@ -54,38 +54,57 @@ class Stock(StockBase):
 
 
 class TradingPlanBase(BaseModel):
-    stock_id: int
-    plan_type: str
-    target_price: float
-    quantity: int
-    reason: str
+    stock_code: str  # 종목코드
+    stock_name: Optional[str] = None  # 종목명
 
 
 class TradingPlanCreate(TradingPlanBase):
     pass
 
 
-class TradingPlanUpdate(BaseModel):
-    executed_price: Optional[float] = None
-    executed_quantity: Optional[int] = None
-    review: Optional[str] = None
-    profit_loss: Optional[float] = None
-    status: Optional[str] = None
+class TradingPlanUpdate(TradingPlanBase):
+    pass
 
 
 class TradingPlan(TradingPlanBase):
     id: int
     user_id: int
-    executed_price: Optional[float] = None
-    executed_quantity: Optional[int] = None
-    executed_at: Optional[datetime] = None
-    review: Optional[str] = None
-    profit_loss: Optional[float] = None
-    status: str
     created_at: datetime
     updated_at: datetime
-    stock: Stock
-    
+
+    class Config:
+        from_attributes = True
+
+
+class TradingPlanHistoryBase(BaseModel):
+    trading_type: str  # 'buy' or 'sell'
+    condition: Optional[str] = None  # 매매 조건
+    target_price: Optional[float] = None  # 매매 계획 가격
+    amount: Optional[int] = None  # 매매 금액
+    reason: Optional[str] = None  # 매매 이유
+    proportion: Optional[float] = None  # 매도 비중 (%)
+    sp_condition: Optional[str] = None  # 익절 조건
+    sp_price: Optional[float] = None  # 익절 가격
+    sp_ratio: Optional[float] = None  # 익절 수익률 (%)
+    sl_condition: Optional[str] = None  # 손절 조건
+    sl_price: Optional[float] = None  # 손절 가격
+    sl_ratio: Optional[float] = None  # 손절 수익률 (%)
+
+
+class TradingPlanHistoryCreate(TradingPlanHistoryBase):
+    pass
+
+
+class TradingPlanHistoryUpdate(TradingPlanHistoryBase):
+    pass
+
+
+class TradingPlanHistory(TradingPlanHistoryBase):
+    id: int
+    trading_plan_id: int
+    created_at: datetime
+    updated_at: datetime
+
     class Config:
         from_attributes = True
 
@@ -217,6 +236,33 @@ class StocksInfoCreate(StocksInfoBase):
 class StocksInfo(StocksInfoBase):
     """종목정보 조회"""
     id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TradingStockBase(BaseModel):
+    """매매 종목 기본 정보"""
+    stock_name: str  # 종목명
+    stock_code: str  # 종목코드
+
+
+class TradingStockCreate(TradingStockBase):
+    """매매 종목 생성"""
+    pass
+
+
+class TradingStock(TradingStockBase):
+    """매매 종목 조회"""
+    id: int
+    is_downloaded: bool
+    latest_orderno: Optional[str] = None
+    reg_type: str = 'manual'  # 등록 방식 ('api': API 동기화, 'manual': 수동 등록)
+    avg_prc: Optional[float] = None
+    rmnd_qty: Optional[int] = None
+    pur_amt: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 

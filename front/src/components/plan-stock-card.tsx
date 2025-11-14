@@ -1,146 +1,65 @@
 'use client'
 
-import { BarChart3 } from 'lucide-react'
-import { useChartData } from '@/lib/hooks/use-chart-data'
-import { useCurrentPrice } from '@/lib/hooks/use-current-price'
-import TradeInfo from './trade-info';
+import { BarChart3, X } from 'lucide-react'
+import { useState } from 'react'
 
 interface Stock {
   id: number
-  symbol: string
-  name: string
-  current_price: number
-  change_rate: number
-  volume: number
+  stock_code: string
+  stock_name: string
+  is_downloaded?: boolean
 }
 
 interface PlanStockCardProps {
   stock?: Stock
-  onClick?: () => void
+  onClick?: (stock: Stock) => void
+  onDelete?: (stockId: number) => void
 }
 
-// 차트 섹션 컴포넌트
-function ChartSection({ stockCode }: { stockCode: string }) {
-  const { data: chartData, isLoading, error } = useChartData(stockCode, 25)
-
-  if (isLoading) {
-    return (
-      <div className="bg-gray-50 rounded-lg h-60 flex items-center justify-center">
-        <div className="text-center">
-          <BarChart3 className="h-8 w-8 text-gray-400 mx-auto mb-2 animate-pulse" />
-          <span className="text-sm text-gray-500">차트 로딩 중...</span>
-        </div>
-      </div>
-    )
-  }
-
-  if (error || !chartData?.data?.length) {
-    return (
-      <div className="bg-gray-50 rounded-lg h-60 flex items-center justify-center">
-        <div className="text-center">
-          <BarChart3 className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-          <span className="text-sm text-gray-500">
-            {error ? '차트 데이터 로드 실패' : '차트 데이터 없음'}
-          </span>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="bg-white rounded-lg">
-      {/* <StockCandlestickChart 
-        data={chartData.data} 
-        height={240}
-        className="w-full"
-        stockCode={stockCode}
-      /> */}
-    </div>
-  )
-}
-
-export default function PlanStockCard({ stock, onClick }: PlanStockCardProps) {
-  // 실제 현재가 데이터 조회
-  const { data: currentPriceData, isLoading: priceLoading } = useCurrentPrice(stock?.symbol || '')
-
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('ko-KR').format(num)
-  }
-
-  const formatVolume = (volume: number) => {
-    if (volume >= 10000000) {
-      return `${(volume / 10000000).toFixed(1)}천만`
-    } else if (volume >= 10000) {
-      return `${(volume / 10000).toFixed(1)}만`
-    }
-    return formatNumber(volume)
-  }
-
-  // 실제 데이터가 있으면 사용, 없으면 기본 데이터 사용
-  const displayPrice = currentPriceData?.current_price || stock?.current_price || 0
-  const displayChangeRate = currentPriceData?.change_rate || stock?.change_rate || 0
-  const displayChangePrice = currentPriceData?.change_price || 0
-  const displayVolume = currentPriceData?.volume || stock?.volume || 0
+export default function PlanStockCard({ stock, onClick, onDelete }: PlanStockCardProps) {
+  const [isHovering, setIsHovering] = useState(false)
 
   // Empty card when no stock data
   if (!stock) {
     return (
-      <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-4 min-h-[380px] flex flex-col items-center justify-center hover:border-gray-400 transition-colors cursor-pointer">
-        <BarChart3 className="h-12 w-12 text-gray-400 mb-2" />
-        <p className="text-gray-500 text-sm">종목을 추가해주세요</p>
+      <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-2 sm:p-4 min-h-[100px] sm:min-h-[200px] flex flex-col items-center justify-center hover:border-gray-400 transition-colors cursor-pointer">
+        <BarChart3 className="h-8 sm:h-12 w-8 sm:w-12 text-gray-400 mb-1 sm:mb-2" />
+        <p className="text-gray-500 text-xs sm:text-sm">종목을 추가해주세요</p>
       </div>
     )
   }
 
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation() // 카드 클릭 이벤트 전파 방지
+    if (onDelete) {
+      onDelete(stock.id)
+    }
+  }
+
   return (
-    <div 
-      className="bg-white border border-gray-200 rounded-lg p-4 min-h-[380px] hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between"
-      onClick={onClick}
+    <div
+      className="relative bg-white border border-gray-200 rounded-lg p-2 sm:p-4 min-h-[80px] sm:min-h-[200px] hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-center"
+      onClick={() => onClick?.(stock)}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
     >
-      {/* Stock Header with Price Info */}
+      {/* Delete Button */}
+      {isHovering && (
+        <button
+          onClick={handleDeleteClick}
+          className="absolute top-1 sm:top-2 right-1 sm:right-2 p-1 sm:p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors z-10"
+          title="삭제"
+          aria-label="종목 삭제"
+        >
+          <X className="h-3 sm:h-4 w-3 sm:w-4" />
+        </button>
+      )}
+
+      {/* Stock Name */}
       <div>
-        <div className="mb-2">
-          <div className="flex justify-between items-start mb-2">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">{stock.name}</h3>
-              <p className="text-sm text-gray-500">{stock.symbol}</p>
-            </div>
-            <div className="text-right">
-              {priceLoading ? (
-                <div className="text-xl font-bold text-gray-400 animate-pulse">
-                  로딩중...
-                </div>
-              ) : (
-                <>
-                  <div className="text-xl font-bold text-gray-900">
-                    {formatNumber(displayPrice)}원
-                  </div>
-                  <div className="flex items-center justify-end">
-                    <span className={`text-sm font-medium ${
-                      displayChangeRate >= 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {displayChangeRate >= 0 ? '+' : ''}{displayChangeRate}%
-                    </span>
-                    <span className={`text-sm font-medium ml-2 ${
-                      displayChangeRate >= 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      ({displayChangeRate >= 0 ? '+' : ''}{formatNumber(displayChangePrice)}원)
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Chart */}
-        <div className="mb-0">
-          <ChartSection stockCode={stock.symbol} />
-        </div>
+        <h3 className="text-sm sm:text-lg font-semibold text-gray-900">{stock.stock_name}</h3>
+        <p className="text-xs sm:text-sm text-gray-500">{stock.stock_code}</p>
       </div>
-
-      {/* Trade Info */}
-      <TradeInfo stockCode={stock.symbol} latestVolume={displayVolume} />
     </div>
   )
 }

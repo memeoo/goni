@@ -236,7 +236,8 @@ def sync_trading_stocks_from_kiwoom(
                     stock_name=stock_info['stock_name'],
                     stock_code=stock_code,
                     latest_orderno=stock_info['latest_orderno'],
-                    is_downloaded=False
+                    is_downloaded=False,
+                    reg_type='api'  # API 동기화로 등록
                 )
                 db.add(new_stock)
                 added_stocks += 1
@@ -262,6 +263,224 @@ def sync_trading_stocks_from_kiwoom(
         raise HTTPException(
             status_code=500,
             detail=f"Kiwoom 동기화 중 오류가 발생했습니다: {str(e)}"
+        )
+
+
+@router.post("")
+def create_trading_stock(
+    stock_code: str,
+    stock_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    관심 종목을 추가합니다 (종목검색에서 선택한 종목)
+
+    Args:
+        stock_code: 종목코드 (예: 005930)
+        stock_name: 종목명 (예: 삼성전자)
+
+    Returns:
+        dict: 추가된 종목 정보
+    """
+    try:
+        # 이미 존재하는 종목인지 확인
+        existing_stock = db.query(TradingStock).filter(
+            TradingStock.stock_code == stock_code
+        ).first()
+
+        if existing_stock:
+            # 이미 존재하는 경우 기존 데이터 반환
+            return {
+                "status": "exists",
+                "message": f"이미 추가된 종목입니다: {stock_name}({stock_code})",
+                "stock_id": existing_stock.id,
+                "stock_code": existing_stock.stock_code,
+                "stock_name": existing_stock.stock_name,
+            }
+
+        # 새 종목 생성
+        new_stock = TradingStock(
+            stock_code=stock_code,
+            stock_name=stock_name,
+            is_downloaded=False,
+            reg_type='manual'  # 수동 등록
+        )
+
+        db.add(new_stock)
+        db.commit()
+        db.refresh(new_stock)
+
+        return {
+            "status": "success",
+            "message": f"종목이 추가되었습니다: {stock_name}({stock_code})",
+            "stock_id": new_stock.id,
+            "stock_code": new_stock.stock_code,
+            "stock_name": new_stock.stock_name,
+        }
+
+    except Exception as e:
+        db.rollback()
+        print(f"❌ 종목 추가 실패: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"종목 추가 중 오류가 발생했습니다: {str(e)}"
+        )
+
+
+@router.get("/owned")
+def get_owned_stocks(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+    skip: int = 0,
+    limit: int = 100
+):
+    """
+    보유 종목 목록 조회 (Kiwoom API 계좌평가현황에서 가져온 실제 보유 종목)
+
+    실제 보유 수량이 0보다 큰 종목들만 반환합니다.
+
+    Query Parameters:
+    - skip: 오프셋 (기본값: 0)
+    - limit: 조회 개수 (기본값: 100)
+    """
+    try:
+        # 사용자의 Kiwoom 계정 정보 확인
+        if not current_user.app_key or not current_user.app_secret:
+            raise HTTPException(
+                status_code=400,
+                detail="Kiwoom 계정 정보가 등록되지 않았습니다. 설정에서 계정 정보를 등록해주세요."
+            )
+
+        print(f"🔄 Kiwoom API에서 계좌평가현황 조회 중... (사용자: {current_user.id})")
+
+        # Kiwoom API 인스턴스 생성
+        kiwoom_api = KiwoomAPI(
+            app_key=current_user.app_key,
+            secret_key=current_user.app_secret,
+            account_no="",
+            use_mock=False
+        )
+
+        # 계좌평가현황 조회
+        account_eval = kiwoom_api.get_account_evaluation(qry_tp='0', dmst_stex_tp='KRX')
+
+        if not account_eval:
+            print("⚠️ 계좌평가현황 조회 실패")
+            return {
+                "data": [],
+                "total": 0,
+                "skip": skip,
+                "limit": limit
+            }
+
+        # 보유 종목 정보 추출
+        stocks_info = account_eval.get('stk_acnt_evlt_prst', [])
+        print(f"✅ 계좌평가현황 조회 완료: {len(stocks_info)}개 종목")
+
+        # 보유 수량이 0보다 큰 종목만 필터링
+        owned_stocks = [
+            stock for stock in stocks_info
+            if int(stock.get('rmnd_qty', 0)) > 0
+        ]
+
+        print(f"✅ 실제 보유 종목: {len(owned_stocks)}개")
+
+        # 페이징 적용
+        paginated_stocks = owned_stocks[skip:skip + limit]
+
+        result = [
+            {
+                "id": 0,  # 임시 ID
+                "stock_code": stock.get('stk_cd', ''),
+                "stock_name": stock.get('stk_nm', ''),
+                "quantity": int(stock.get('rmnd_qty', 0)),
+                "avg_price": float(stock.get('avg_prc', 0)),
+            }
+            for stock in paginated_stocks
+            if stock.get('stk_cd', '')
+        ]
+
+        print(f"✅ 보유 종목 조회 완료: {len(result)}건 (사용자 {current_user.id}, 전체: {len(owned_stocks)}건)")
+
+        return {
+            "data": result,
+            "total": len(owned_stocks),
+            "skip": skip,
+            "limit": limit
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ 보유 종목 조회 중 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"보유 종목 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+
+@router.get("/plan-mode")
+def get_plan_mode_stocks(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+    skip: int = 0,
+    limit: int = 100
+):
+    """
+    계획 모드용 종목 목록 조회 (수동으로 추가된 종목만)
+
+    종목들은 추가 시간 역순(최신순)으로 정렬됩니다.
+
+    Query Parameters:
+    - skip: 오프셋 (기본값: 0)
+    - limit: 조회 개수 (기본값: 100)
+    """
+    try:
+        # 수동으로 추가된 종목만 조회 (reg_type='manual')
+        query = db.query(TradingStock).filter(
+            TradingStock.reg_type == 'manual'
+        ).order_by(
+            TradingStock.created_at.desc()  # 최신 추가순으로 정렬
+        )
+
+        # 전체 개수 (페이징 전)
+        total = query.count()
+
+        # 페이징 적용
+        stocks = query.offset(skip).limit(limit).all()
+
+        result = [
+            {
+                "id": stock.id,
+                "stock_code": stock.stock_code,
+                "stock_name": stock.stock_name,
+                "is_downloaded": stock.is_downloaded,
+                "reg_type": stock.reg_type,
+                "created_at": stock.created_at,
+                "updated_at": stock.updated_at,
+            }
+            for stock in stocks
+        ]
+
+        print(f"✅ 계획 모드 종목 조회 완료: {len(result)}건 (수동 추가 종목, 전체: {total}건)")
+
+        return {
+            "data": result,
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }
+
+    except Exception as e:
+        print(f"❌ 계획 모드 종목 조회 중 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"계획 모드 종목 조회 중 오류가 발생했습니다: {str(e)}"
         )
 
 

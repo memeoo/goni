@@ -451,17 +451,17 @@ export default function RecapModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl w-[80%] max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full h-[95vh] sm:h-auto sm:w-[90%] sm:max-w-6xl sm:max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-gray-900">
+        <div className="sticky top-0 bg-white border-b px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <h2 className="text-lg sm:text-2xl font-bold text-gray-900">
             {stockName || '매매 복기'}
           </h2>
-          {/* 호버된 봉의 정보 표시 */}
+          {/* 호버된 봉의 정보 표시 - 모바일에서는 숨김 */}
           {hoveredInfo && (
-            <div className="flex items-center gap-6 text-sm text-gray-700">
-              <div className="flex gap-4">
+            <div className="hidden lg:flex items-center gap-3 text-xs lg:text-sm text-gray-700 overflow-x-auto">
+              <div className="flex gap-2 lg:gap-4 whitespace-nowrap">
                 <div>
                   <span className="text-gray-500">시가:</span>{' '}
                   <span className="font-semibold">
@@ -520,14 +520,14 @@ export default function RecapModal({
           )}
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl"
+            className="text-gray-400 hover:text-gray-600 text-xl sm:text-2xl ml-auto sm:ml-0"
           >
             ×
           </button>
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSubmit} className="p-4">
+        <form onSubmit={handleSubmit} className="p-3 sm:p-4 md:p-6">
           {/* 일봉 차트 */}
           {chartLoading ? (
             <div className="mb-4 text-center py-6 bg-gray-50 rounded-lg border border-gray-200">

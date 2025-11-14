@@ -10,29 +10,67 @@ from app.routers.auth import get_current_user
 router = APIRouter(prefix="/api/trading", tags=["trading"])
 
 
+@router.post("", response_model=TradingSchema)
 @router.post("/", response_model=TradingSchema)
 def create_trading(
     trading: TradingCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """매매 기록 생성"""
-    db_trading = TradingHistory(
-        user_id=current_user.id,
-        executed_at=trading.executed_at,
-        trade_type=trading.trade_type,
-        order_no=trading.order_no,
-        stock_name=trading.stock_name,
-        stock_code=trading.stock_code,
-        executed_price=trading.executed_price,
-        executed_quantity=trading.executed_quantity,
-        executed_amount=trading.executed_amount,
-        broker=trading.broker
-    )
-    db.add(db_trading)
-    db.commit()
-    db.refresh(db_trading)
-    return db_trading
+    """매매 기록 생성 (trading_stocks 자동 업데이트)"""
+    try:
+        # 매매 기록 생성
+        db_trading = TradingHistory(
+            user_id=current_user.id,
+            executed_at=trading.executed_at,
+            trade_type=trading.trade_type,
+            order_no=trading.order_no,
+            stock_name=trading.stock_name,
+            stock_code=trading.stock_code,
+            executed_price=trading.executed_price,
+            executed_quantity=trading.executed_quantity,
+            executed_amount=trading.executed_amount,
+            broker=trading.broker
+        )
+        db.add(db_trading)
+
+        # trading_stocks 테이블 업데이트 또는 생성
+        trading_stock = db.query(TradingStock).filter(
+            TradingStock.stock_code == trading.stock_code
+        ).first()
+
+        if trading_stock:
+            # 기존 종목 업데이트: latest_orderno를 현재 주문번호로 설정
+            # (매매 기록이 추가되었으므로 최신 상태로 마크)
+            if trading.order_no:
+                trading_stock.latest_orderno = trading.order_no
+            trading_stock.updated_at = datetime.utcnow()
+            print(f"✏️  {trading.stock_name}({trading.stock_code}) trading_stocks 업데이트")
+        else:
+            # 새 종목 생성
+            new_stock = TradingStock(
+                stock_code=trading.stock_code,
+                stock_name=trading.stock_name,
+                is_downloaded=False,
+                latest_orderno=trading.order_no,
+                reg_type='manual'  # 수동 등록
+            )
+            db.add(new_stock)
+            print(f"➕ {trading.stock_name}({trading.stock_code}) trading_stocks 생성 (수동)")
+
+        db.commit()
+        db.refresh(db_trading)
+
+        print(f"✅ 매매 기록 생성 완료: {trading.stock_name}({trading.stock_code}) - {trading.trade_type.upper()}")
+        return db_trading
+
+    except Exception as e:
+        db.rollback()
+        print(f"❌ 매매 기록 생성 실패: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"매매 기록 생성 중 오류가 발생했습니다: {str(e)}"
+        )
 
 
 @router.get("/{stock_code}/trades/")
@@ -125,8 +163,7 @@ def get_stock_trades(
         )
 
 
-@router.get("", response_model=List[TradingSchema])
-@router.get("/", response_model=List[TradingSchema])
+@router.get("/list", response_model=List[TradingSchema])
 def get_trading_records(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

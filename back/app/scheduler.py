@@ -28,6 +28,12 @@ def sync_stocks_info_job():
     - 코스피 (market_code='0')
     - 코스닥 (market_code='10')
     """
+    import sys
+
+    # 부모 디렉토리를 path에 추가 (analyze 모듈 임포트를 위해)
+    if '/home/ubuntu/goni' not in sys.path:
+        sys.path.insert(0, '/home/ubuntu/goni')
+
     from app.database import SessionLocal
     from sqlalchemy import text
     from analyze.lib.kiwoom import KiwoomAPI

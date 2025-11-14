@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Save, Eye, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Cookies from 'js-cookie'
+import { tradingStocksAPI } from '@/lib/api'
 
 interface UserProfile {
   id: number
@@ -60,9 +61,21 @@ export default function ProfilePage() {
       if (!response.ok) throw new Error('저장 실패')
       return response.json()
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('키움증권 API 정보가 저장되었습니다')
       queryClient.invalidateQueries({ queryKey: ['profile'] })
+
+      // 저장 후 자동으로 거래 기록 동기화 시작
+      toast.loading('거래 기록을 동기화하는 중입니다...')
+      try {
+        await tradingStocksAPI.syncFromKiwoom(30) // 최근 30일 거래 기록 조회
+        toast.dismiss()
+        toast.success('거래 기록 동기화가 완료되었습니다')
+      } catch (error) {
+        console.warn('거래 기록 동기화 실패:', error)
+        toast.dismiss()
+        toast.error('거래 기록 동기화에 실패했습니다. 대시보드에서 수동으로 동기화할 수 있습니다.')
+      }
     },
     onError: () => {
       toast.error('저장에 실패했습니다')
@@ -137,14 +150,14 @@ export default function ProfilePage() {
           {/* 키움증권 API 설정 */}
           <div>
             <h2 className="text-lg font-semibold text-gray-900 mb-2">키움증권 API 설정</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              복기 모드에서 매매 내역을 조회하려면 키움증권 API 신청 및 설정이 필요합니다.<br></br>
+             <p className="text-sm text-gray-600 mb-4">
+              복기 모드에서 매매 내역을 자동으로 조회하려면 키움증권 API 신청 및 설정이 필요합니다.<br></br>
               아래의 사이트에서 키움증권 API 신청을 하신 후,<br></br>
               <a href='https://openapi.kiwoom.com/mgmt/VOpenApiRegView'><span style={{ color: 'blue', fontStyle:'italic'}}>https://openapi.kiwoom.com/mgmt/VOpenApiRegView</span></a><br></br>
-              [계좌 APP Key 관리] Tab에서, IP 주소등록에 3.34.102.218 를 입력하고<br></br> 
-              얻은 APP KEY와 APP SECRET 정보를 아래에 입력해 주세요.
-            </p>
-            <div className="space-y-4">
+              [계좌 APP Key 관리] Tab에서, IP 주소등록에 3.34.102.218 를 입력하고 (*주의: 본인 컴퓨터 IP가 아닙니다.)<br></br> 
+              얻은 APP KEY와 APP SECRET 정보를 아래에 입력하시고 저장 버튼을 눌러주세요.
+            </p>  
+	  <div className="space-y-4">
               {/* APP KEY */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

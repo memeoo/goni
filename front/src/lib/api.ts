@@ -1,11 +1,12 @@
 import axios from 'axios'
 import Cookies from 'js-cookie'
 
-// Use relative path for client-side requests to avoid CORS issues
-// This way requests go to the same origin (whether localhost or production IP)
+// API Base URL 결정 로직:
+// - 클라이언트 사이드: NEXT_PUBLIC_API_URL 사용 (모바일 등 외부 접속을 위해)
+// - 서버 사이드: BACKEND_URL 사용 (localhost에서 백엔드로 직접 호출)
 const API_BASE_URL = typeof window !== 'undefined'
-  ? '' // Empty means relative to current origin
-  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') // Server-side defaults to explicit URL
+  ? (process.env.NEXT_PUBLIC_API_URL || '') // 클라이언트: 명시적 URL 또는 상대경로
+  : (process.env.BACKEND_URL || 'http://localhost:8000') // 서버: localhost 사용
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -104,12 +105,18 @@ export const stocksAPI = {
 }
 
 export const tradingPlansAPI = {
+  getPlanModeStocks: (skip = 0, limit = 100) =>
+    api.get(`/api/trading-plans/plan-mode?skip=${skip}&limit=${limit}`),
   getTradingPlans: (skip = 0, limit = 100) =>
     api.get(`/api/trading-plans?skip=${skip}&limit=${limit}`),
   getTradingPlan: (planId: number) =>
     api.get(`/api/trading-plans/${planId}`),
+  saveTradingPlan: (planData: any) =>
+    api.post('/api/trading-plans', planData),
   createTradingPlan: (planData: any) =>
     api.post('/api/trading-plans', planData),
+  addFromOwned: (stockCodes: string[]) =>
+    api.post('/api/trading-plans/add-from-owned', { stock_codes: stockCodes }),
   updateTradingPlan: (planId: number, planData: any) =>
     api.put(`/api/trading-plans/${planId}`, planData),
   deleteTradingPlan: (planId: number) =>
@@ -123,9 +130,15 @@ export const tradingAPI = {
     api.get(`/api/trading?limit=${limit}`),
   syncTradedStocks: () =>
     api.post('/api/trading/sync-stocks'),
+  addTrading: (tradeData: any) =>
+    api.post('/api/trading', tradeData),
 }
 
 export const tradingStocksAPI = {
+  getOwnedStocks: (skip = 0, limit = 100) =>
+    api.get(`/api/trading-stocks/owned?skip=${skip}&limit=${limit}`),
+  getPlanModeStocks: (skip = 0, limit = 100) =>
+    api.get(`/api/trading-stocks/plan-mode?skip=${skip}&limit=${limit}`),
   getTradingStocks: (skip = 0, limit = 100) =>
     api.get(`/api/trading-stocks?skip=${skip}&limit=${limit}`),
   syncFromKiwoom: (days = 5) =>
@@ -134,4 +147,30 @@ export const tradingStocksAPI = {
     api.post(`/api/trading-stocks/${stockCode}/sync-history`),
   syncAccountEvaluation: () =>
     api.post('/api/trading-stocks/sync-account-evaluation'),
+  addStock: (stockCode: string, stockName: string) => {
+    const params = new URLSearchParams()
+    params.append('stock_code', stockCode)
+    params.append('stock_name', stockName)
+    return api.post(`/api/trading-stocks?${params.toString()}`)
+  },
+}
+
+export const stocksInfoAPI = {
+  getStocksInfo: (skip = 0, limit = 100, marketCode?: string) => {
+    const params = new URLSearchParams()
+    params.append('skip', skip.toString())
+    params.append('limit', limit.toString())
+    if (marketCode) params.append('market_code', marketCode)
+    return api.get(`/api/stocks-info/?${params.toString()}`)
+  },
+  searchStocksInfo: (query: string, marketCode?: string, skip = 0, limit = 50) => {
+    const params = new URLSearchParams()
+    params.append('q', query)
+    params.append('skip', skip.toString())
+    params.append('limit', limit.toString())
+    if (marketCode) params.append('market_code', marketCode)
+    return api.get(`/api/stocks-info/search?${params.toString()}`)
+  },
+  getStockInfoByCode: (code: string) =>
+    api.get(`/api/stocks-info/${code}`),
 }
