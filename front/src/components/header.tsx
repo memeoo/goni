@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { TrendingUp, Plus, RefreshCw, Settings, LogOut, User, Menu, X } from 'lucide-react'
+import { TrendingUp, Plus, RefreshCw, Settings, LogOut, User, Menu, X, ArrowRight } from 'lucide-react'
 import { clearAuthToken } from '@/lib/api'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 
 interface HeaderProps {
   mode: 'plan' | 'review'
@@ -23,6 +23,7 @@ export default function Header({
   isRefreshing = false
 }: HeaderProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const [menuOpen, setMenuOpen] = useState(false)
   const today = new Date().toLocaleDateString('ko-KR', {
     year: 'numeric',
@@ -30,6 +31,11 @@ export default function Header({
     day: 'numeric',
     weekday: 'long'
   })
+
+  // 현재 페이지에 따른 버튼 텍스트 결정
+  const isRecommendationPage = pathname === '/recommendation'
+  const strategyButtonLabel = isRecommendationPage ? '계획/복기' : '추천'
+  const strategyButtonIcon = isRecommendationPage ? Settings : ArrowRight
 
   const handleLogout = () => {
     clearAuthToken()
@@ -47,31 +53,33 @@ export default function Header({
             <h1 className="text-2xl font-bold text-gray-900">Goni</h1>
           </div>
 
-          {/* Center: Mode Toggle */}
-          <div className="flex items-center">
-            <div className="bg-gray-100 rounded-lg p-1 flex">
-              <button
-                onClick={() => onModeChange('plan')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  mode === 'plan'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                계획
-              </button>
-              <button
-                onClick={() => onModeChange('review')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  mode === 'review'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                복기
-              </button>
+          {/* Center: Mode Toggle - 추천 페이지에서는 숨김 */}
+          {!isRecommendationPage && (
+            <div className="flex items-center">
+              <div className="bg-gray-100 rounded-lg p-1 flex">
+                <button
+                  onClick={() => onModeChange('plan')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    mode === 'plan'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  계획
+                </button>
+                <button
+                  onClick={() => onModeChange('review')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    mode === 'review'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  복기
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Right: Date and Action Buttons */}
           <div className="flex items-center gap-2">
@@ -107,10 +115,10 @@ export default function Header({
             <button
               onClick={onStrategyManage}
               className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1 hidden sm:flex text-sm"
-              title="추천"
+              title={strategyButtonLabel}
             >
-              <Settings className="h-4 w-4" />
-              <span className="hidden lg:inline">추천</span>
+              {isRecommendationPage ? <Settings className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+              <span className="hidden lg:inline">{strategyButtonLabel}</span>
             </button>
 
             <button
@@ -141,31 +149,33 @@ export default function Header({
             <h1 className="text-xl font-bold text-gray-900">Goni</h1>
           </div>
 
-          {/* Center: Mode Toggle */}
-          <div className="flex-1 mx-3">
-            <div className="bg-gray-100 rounded-lg p-0.5 flex justify-center">
-              <button
-                onClick={() => onModeChange('plan')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex-1 ${
-                  mode === 'plan'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                계획
-              </button>
-              <button
-                onClick={() => onModeChange('review')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex-1 ${
-                  mode === 'review'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                복기
-              </button>
+          {/* Center: Mode Toggle - 추천 페이지에서는 숨김 */}
+          {!isRecommendationPage && (
+            <div className="flex-1 mx-3">
+              <div className="bg-gray-100 rounded-lg p-0.5 flex justify-center">
+                <button
+                  onClick={() => onModeChange('plan')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex-1 ${
+                    mode === 'plan'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  계획
+                </button>
+                <button
+                  onClick={() => onModeChange('review')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex-1 ${
+                    mode === 'review'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  복기
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Right: Menu Button */}
           <button
@@ -217,8 +227,8 @@ export default function Header({
               }}
               className="w-full text-left bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2 text-sm"
             >
-              <Settings className="h-4 w-4" />
-              <span>추천</span>
+              {isRecommendationPage ? <Settings className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+              <span>{strategyButtonLabel}</span>
             </button>
 
             <button
