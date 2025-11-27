@@ -54,35 +54,35 @@ export default function AlgorithmDetailPage() {
       const response = await recStocksAPI.getRecStocksByAlgorithm(parseInt(algorithmId), 0, 100)
       const data = response.data
 
-      if (data && data.data && data.data.length > 0) {
+      if (data && data.data) {
         setRecStocks(data.data)
 
         // 첫 번째 항목의 알고리즘 정보 설정
-        if (data.data[0].algorithm) {
+        if (data.data.length > 0 && data.data[0].algorithm) {
           setAlgorithm(data.data[0].algorithm)
         }
 
         // 날짜별로 그룹핑 (최신 순)
-        const grouped: GroupedRecStocks = {}
-        data.data.forEach((stock: RecStock) => {
-          const date = stock.recommendation_date
-          if (!grouped[date]) {
-            grouped[date] = []
-          }
-          grouped[date].push(stock)
-        })
-
-        // 날짜를 최신순으로 정렬
-        const sortedGrouped: GroupedRecStocks = {}
-        Object.keys(grouped)
-          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
-          .forEach((date) => {
-            sortedGrouped[date] = grouped[date]
+        if (data.data.length > 0) {
+          const grouped: GroupedRecStocks = {}
+          data.data.forEach((stock: RecStock) => {
+            const date = stock.recommendation_date
+            if (!grouped[date]) {
+              grouped[date] = []
+            }
+            grouped[date].push(stock)
           })
 
-        setGroupedStocks(sortedGrouped)
-      } else {
-        setError('추천 종목이 없습니다.')
+          // 날짜를 최신순으로 정렬
+          const sortedGrouped: GroupedRecStocks = {}
+          Object.keys(grouped)
+            .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+            .forEach((date) => {
+              sortedGrouped[date] = grouped[date]
+            })
+
+          setGroupedStocks(sortedGrouped)
+        }
       }
     } catch (err) {
       console.error('추천 종목 조회 중 오류:', err)
