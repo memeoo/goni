@@ -5,7 +5,7 @@
 기능: CRUD 작업, 날짜별/알고리즘별 조회, 페이지네이션 지원
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from sqlalchemy.orm import Session
 from datetime import date, datetime
 from typing import List, Optional
@@ -63,6 +63,114 @@ def create_rec_stock(
     return db_rec_stock
 
 
+# 더 구체적인 경로들을 먼저 정의 (/{id}보다 먼저)
+@router.get("/latest/{days}", response_model=dict)
+def get_latest_rec_stocks(
+    days: int = Path(ge=1, le=30, description="최근 N일"),
+    algorithm_id: Optional[int] = Query(None, description="알고리즘 ID 필터"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """
+    최근 N일간의 추천 종목 조회
+
+    - **days**: 최근 N일 (기본값: 7, 최대: 30)
+    - **algorithm_id**: 특정 알고리즘으로 추가 필터링 (선택)
+    """
+    from datetime import datetime, timedelta
+
+    start_date = date.today() - timedelta(days=days)
+
+    query = db.query(RecStock).filter(RecStock.recommendation_date >= start_date)
+
+    if algorithm_id:
+        query = query.filter(RecStock.algorithm_id == algorithm_id)
+
+    total = query.count()
+    rec_stocks = query.order_by(RecStock.recommendation_date.desc()).offset(skip).limit(limit).all()
+
+    logger.info(f"최근 {days}일 추천 종목 조회: 전체 {total}개, 반환 {len(rec_stocks)}개")
+
+    return {
+        "data": rec_stocks,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
+
+
+@router.get("/algorithm/{algorithm_id}", response_model=dict)
+def get_rec_stocks_by_algorithm(
+    algorithm_id: int,
+    recommendation_date: Optional[date] = Query(None, description="추천날짜 필터"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """
+    특정 알고리즘으로 추천된 종목 목록 조회
+
+    - **algorithm_id**: 알고리즘 ID (필수)
+    - **recommendation_date**: 추천날짜로 추가 필터링 (선택)
+    """
+    # 알고리즘 존재 여부 확인
+    algorithm = db.query(Algorithm).filter(Algorithm.id == algorithm_id).first()
+    if not algorithm:
+        logger.warning(f"알고리즘 ID {algorithm_id} 존재하지 않음")
+        raise HTTPException(status_code=404, detail="Algorithm not found")
+
+    query = db.query(RecStock).filter(RecStock.algorithm_id == algorithm_id)
+
+    if recommendation_date:
+        query = query.filter(RecStock.recommendation_date == recommendation_date)
+
+    total = query.count()
+    rec_stocks = query.order_by(RecStock.recommendation_date.desc()).offset(skip).limit(limit).all()
+
+    logger.info(f"알고리즘 {algorithm_id} 추천 종목 조회: 전체 {total}개, 반환 {len(rec_stocks)}개")
+
+    return {
+        "data": rec_stocks,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
+
+
+@router.get("/date/{recommendation_date}", response_model=dict)
+def get_rec_stocks_by_date(
+    recommendation_date: date,
+    algorithm_id: Optional[int] = Query(None, description="알고리즘 ID 필터"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """
+    특정 날짜의 추천 종목 목록 조회
+
+    - **recommendation_date**: 추천날짜 (필수, YYYY-MM-DD 형식)
+    - **algorithm_id**: 특정 알고리즘으로 추가 필터링 (선택)
+    """
+    query = db.query(RecStock).filter(RecStock.recommendation_date == recommendation_date)
+
+    if algorithm_id:
+        query = query.filter(RecStock.algorithm_id == algorithm_id)
+
+    total = query.count()
+    rec_stocks = query.order_by(RecStock.algorithm_id).offset(skip).limit(limit).all()
+
+    logger.info(f"날짜 {recommendation_date} 추천 종목 조회: 전체 {total}개, 반환 {len(rec_stocks)}개")
+
+    return {
+        "data": rec_stocks,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
+
+
+# 일반 경로들을 뒤에 정의
 @router.get("/{rec_stock_id}", response_model=schemas.RecStockWithAlgorithm)
 def get_rec_stock(
     rec_stock_id: int,
@@ -150,76 +258,6 @@ def get_rec_stocks(
     }
 
 
-@router.get("/algorithm/{algorithm_id}", response_model=dict)
-def get_rec_stocks_by_algorithm(
-    algorithm_id: int,
-    recommendation_date: Optional[date] = Query(None, description="추천날짜 필터"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db)
-):
-    """
-    특정 알고리즘으로 추천된 종목 목록 조회
-
-    - **algorithm_id**: 알고리즘 ID (필수)
-    - **recommendation_date**: 추천날짜로 추가 필터링 (선택)
-    """
-    # 알고리즘 존재 여부 확인
-    algorithm = db.query(Algorithm).filter(Algorithm.id == algorithm_id).first()
-    if not algorithm:
-        logger.warning(f"알고리즘 ID {algorithm_id} 존재하지 않음")
-        raise HTTPException(status_code=404, detail="Algorithm not found")
-
-    query = db.query(RecStock).filter(RecStock.algorithm_id == algorithm_id)
-
-    if recommendation_date:
-        query = query.filter(RecStock.recommendation_date == recommendation_date)
-
-    total = query.count()
-    rec_stocks = query.order_by(RecStock.recommendation_date.desc()).offset(skip).limit(limit).all()
-
-    logger.info(f"알고리즘 {algorithm_id} 추천 종목 조회: 전체 {total}개, 반환 {len(rec_stocks)}개")
-
-    return {
-        "data": rec_stocks,
-        "total": total,
-        "skip": skip,
-        "limit": limit
-    }
-
-
-@router.get("/date/{recommendation_date}", response_model=dict)
-def get_rec_stocks_by_date(
-    recommendation_date: date,
-    algorithm_id: Optional[int] = Query(None, description="알고리즘 ID 필터"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db)
-):
-    """
-    특정 날짜의 추천 종목 목록 조회
-
-    - **recommendation_date**: 추천날짜 (필수, YYYY-MM-DD 형식)
-    - **algorithm_id**: 특정 알고리즘으로 추가 필터링 (선택)
-    """
-    query = db.query(RecStock).filter(RecStock.recommendation_date == recommendation_date)
-
-    if algorithm_id:
-        query = query.filter(RecStock.algorithm_id == algorithm_id)
-
-    total = query.count()
-    rec_stocks = query.order_by(RecStock.algorithm_id).offset(skip).limit(limit).all()
-
-    logger.info(f"날짜 {recommendation_date} 추천 종목 조회: 전체 {total}개, 반환 {len(rec_stocks)}개")
-
-    return {
-        "data": rec_stocks,
-        "total": total,
-        "skip": skip,
-        "limit": limit
-    }
-
-
 @router.put("/{rec_stock_id}", response_model=schemas.RecStockWithAlgorithm)
 def update_rec_stock(
     rec_stock_id: int,
@@ -280,39 +318,3 @@ def delete_rec_stock(
     logger.info(f"추천 종목 삭제: {stock_code}({stock_name})")
 
     return {"message": "Recommended stock deleted successfully"}
-
-
-@router.get("/latest/{days}", response_model=dict)
-def get_latest_rec_stocks(
-    days: int = Query(7, ge=1, le=30, description="최근 N일"),
-    algorithm_id: Optional[int] = Query(None, description="알고리즘 ID 필터"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db)
-):
-    """
-    최근 N일간의 추천 종목 조회
-
-    - **days**: 최근 N일 (기본값: 7, 최대: 30)
-    - **algorithm_id**: 특정 알고리즘으로 추가 필터링 (선택)
-    """
-    from datetime import datetime, timedelta
-
-    start_date = date.today() - timedelta(days=days)
-
-    query = db.query(RecStock).filter(RecStock.recommendation_date >= start_date)
-
-    if algorithm_id:
-        query = query.filter(RecStock.algorithm_id == algorithm_id)
-
-    total = query.count()
-    rec_stocks = query.order_by(RecStock.recommendation_date.desc()).offset(skip).limit(limit).all()
-
-    logger.info(f"최근 {days}일 추천 종목 조회: 전체 {total}개, 반환 {len(rec_stocks)}개")
-
-    return {
-        "data": rec_stocks,
-        "total": total,
-        "skip": skip,
-        "limit": limit
-    }
