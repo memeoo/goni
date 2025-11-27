@@ -195,6 +195,10 @@ class Algorithm(Base):
     name = sa.Column(sa.String, nullable=False)  # 알고리즘 이름
     description = sa.Column(sa.Text, nullable=True)  # 알고리즘 설명
 
+    # 스케줄 정보
+    update_time = sa.Column(sa.String, nullable=True)  # 업데이트 시간 (예: "18:10", HH:MM 형식)
+    issue_time = sa.Column(sa.String, nullable=True)  # 발행 시간 (추가 정보용)
+
     # 시스템 정보
     created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
     updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
