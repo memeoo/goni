@@ -10,10 +10,12 @@ from sqlalchemy.orm import Session
 from datetime import date, datetime
 from typing import List, Optional
 import logging
+import os
 
 from app.database import get_db
 from app.models import RecStock, Algorithm
 from app import schemas
+from app.services.recommendation_service import RecommendationService
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +63,97 @@ def create_rec_stock(
     logger.info(f"추천 종목 생성: {rec_stock.stock_code}({rec_stock.stock_name})")
 
     return db_rec_stock
+
+
+@router.post("/update-by-condition/{algorithm_id}", response_model=dict)
+def update_rec_stocks_by_condition(
+    algorithm_id: int,
+    condition_name: str = Query(..., description="조건식 이름 (예: '신고가 돌파')"),
+    db: Session = Depends(get_db)
+):
+    """
+    키움 조건식으로 추천 종목을 검색하고 업데이트합니다.
+
+    조건식으로 해당 조건을 만족하는 종목들을 검색하여 rec_stocks 테이블에 저장합니다.
+    기존 같은 알고리즘의 오늘 날짜 추천 종목은 삭제됩니다.
+
+    - **algorithm_id**: 알고리즘 ID (필수)
+    - **condition_name**: 키움에 설정된 조건식 이름 (필수, 예: '신고가 돌파')
+
+    Returns:
+        dict: {
+            "success": true/false,
+            "message": "메시지",
+            "count": 저장된 종목 수
+        }
+    """
+    try:
+        # 알고리즘 존재 여부 확인
+        algorithm = db.query(Algorithm).filter(Algorithm.id == algorithm_id).first()
+        if not algorithm:
+            logger.warning(f"알고리즘 ID {algorithm_id} 존재하지 않음")
+            raise HTTPException(status_code=404, detail="Algorithm not found")
+
+        # 키움 API 자격증명 확인
+        app_key = os.getenv('KIWOOM_APP_KEY')
+        secret_key = os.getenv('KIWOOM_SECRET_KEY')
+        account_no = os.getenv('KIWOOM_ACCOUNT_NO')
+
+        if not app_key or not secret_key or not account_no:
+            logger.error("키움 API 자격증명이 설정되지 않았습니다")
+            raise HTTPException(
+                status_code=500,
+                detail="키움 API 자격증명이 설정되지 않았습니다"
+            )
+
+        # RecommendationService 사용
+        service = RecommendationService(app_key, secret_key, account_no)
+
+        # 조건 ID 조회
+        condition_id = service.get_condition_by_name(condition_name)
+        if not condition_id:
+            logger.warning(f"조건식 '{condition_name}'을(를) 찾을 수 없습니다")
+            raise HTTPException(
+                status_code=404,
+                detail=f"조건식 '{condition_name}'을(를) 찾을 수 없습니다"
+            )
+
+        # 추천 종목 검색 및 업데이트
+        success = service.search_and_update_rec_stocks(
+            condition_name=condition_name,
+            algorithm_id=algorithm_id,
+            db=db,
+            stock_exchange_type='%'  # 전체
+        )
+
+        if success:
+            # 저장된 종목 수 조회
+            count = db.query(RecStock).filter(
+                RecStock.algorithm_id == algorithm_id,
+                RecStock.recommendation_date == date.today()
+            ).count()
+
+            logger.info(f"✅ 추천 종목 업데이트 완료: {count}개")
+            return {
+                "success": True,
+                "message": f"추천 종목 업데이트 완료: {count}개",
+                "count": count
+            }
+        else:
+            logger.error("추천 종목 업데이트 실패")
+            raise HTTPException(
+                status_code=500,
+                detail="추천 종목 업데이트 실패"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"추천 종목 업데이트 중 오류: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"추천 종목 업데이트 실패: {str(e)}"
+        )
 
 
 # 더 구체적인 경로들을 먼저 정의 (/{id}보다 먼저)
