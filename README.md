@@ -145,12 +145,15 @@ python main.py
       ↓
    키움 API에서 종목 검색
       ↓
-   기존 오늘 날짜 데이터 삭제
-      ↓
-   검색된 종목들을 rec_stocks에 저장
+   검색된 종목들을 rec_stocks에 저장 (누적)
       ↓
    로그에 결과 기록
    ```
+
+   **데이터 관리**:
+   - 기존 데이터는 삭제하지 않고 누적됨
+   - `recommendation_date` 필드로 날짜별 구분
+   - 역사 데이터 보존으로 추세 분석 가능
 
 **알고리즘별 설정**:
 - **알고리즘 ID 1** (신고가 따라잡기):
@@ -182,8 +185,8 @@ python main.py
    - 키움 조건 검색 API를 활용한 추천 종목 관리
    - 주요 메서드:
      - `get_condition_by_name()`: 조건명으로 조건 ID 조회
-     - `search_and_update_rec_stocks()`: 조건식으로 종목 검색하여 DB에 저장
-   - 자동으로 기존 같은 알고리즘의 오늘 날짜 데이터 삭제 후 새 데이터 저장
+     - `search_and_update_rec_stocks()`: 조건식으로 종목 검색하여 DB에 저장 (누적)
+   - 기존 데이터는 삭제하지 않고 `recommendation_date`로 구분하여 누적 저장
 
 2. **API 엔드포인트 추가** (`back/app/routers/rec_stocks.py`):
    - `POST /api/rec-stocks/update-by-condition/{algorithm_id}`
@@ -197,9 +200,9 @@ python main.py
      - 현재가 및 기타 정보 수집
 
    - **데이터베이스 관리**:
-     - 오늘 날짜의 기존 데이터 자동 삭제
-     - 새 검색 결과를 rec_stocks에 저장
-     - 알고리즘별 관리
+     - 검색 결과를 rec_stocks에 누적 저장
+     - `recommendation_date` 필드로 날짜별 구분
+     - 역사 데이터 보존으로 분석 가능
 
    - **에러 처리**:
      - 존재하지 않는 조건명 감지
