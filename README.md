@@ -106,6 +106,68 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-27: 추천 종목 서비스 및 키움 조건 검색 통합
+
+#### 신기능: 키움 조건식으로 추천 종목 자동 업데이트
+
+**목적**: 키움증권의 조건 검색 API를 이용하여 특정 조건(예: '신고가 돌파')을 만족하는 종목들을 자동으로 검색하고 rec_stocks 테이블에 저장
+
+**구현 내용**:
+
+1. **RecommendationService 클래스** (`back/app/services/recommendation_service.py`):
+   - 키움 조건 검색 API를 활용한 추천 종목 관리
+   - 주요 메서드:
+     - `get_condition_by_name()`: 조건명으로 조건 ID 조회
+     - `search_and_update_rec_stocks()`: 조건식으로 종목 검색하여 DB에 저장
+   - 자동으로 기존 같은 알고리즘의 오늘 날짜 데이터 삭제 후 새 데이터 저장
+
+2. **API 엔드포인트 추가** (`back/app/routers/rec_stocks.py`):
+   - `POST /api/rec-stocks/update-by-condition/{algorithm_id}`
+   - 쿼리 파라미터: `condition_name` (예: '신고가 돌파')
+   - 응답: 저장된 종목 개수 및 성공 여부
+
+3. **주요 기능**:
+   - **조건 검색 자동화**:
+     - 조건명으로 자동 ID 조회
+     - 키움 API를 통한 실시간 종목 검색
+     - 현재가 및 기타 정보 수집
+
+   - **데이터베이스 관리**:
+     - 오늘 날짜의 기존 데이터 자동 삭제
+     - 새 검색 결과를 rec_stocks에 저장
+     - 알고리즘별 관리
+
+   - **에러 처리**:
+     - 존재하지 않는 조건명 감지
+     - 환경변수 자격증명 검증
+     - 타임아웃 및 API 오류 처리
+
+**사용 예시**:
+```bash
+# '신고가 돌파' 조건으로 알고리즘 ID 1의 추천 종목 업데이트
+curl -X POST 'http://localhost:8000/api/rec-stocks/update-by-condition/1?condition_name=%EC%8B%A0%EA%B3%A0%EA%B0%80%20%EB%8F%8C%ED%8C%8C'
+```
+
+**응답 예시**:
+```json
+{
+  "success": true,
+  "message": "추천 종목 업데이트 완료: 15개",
+  "count": 15
+}
+```
+
+**필수 환경변수**:
+- `KIWOOM_APP_KEY`: 키움증권 앱 키
+- `KIWOOM_SECRET_KEY`: 키움증권 시크릿 키
+- `KIWOOM_ACCOUNT_NO`: 계좌번호
+
+**주의사항**:
+- 키움 API 조건 검색은 WebSocket 기반이므로 초기 응답 시간이 걸릴 수 있습니다
+- 조건명은 키움에 등록된 정확한 이름이어야 합니다 (예: '신고가 돌파')
+
+---
+
 ### 2025-11-27: 알고리즘별 추천 종목 리스트 페이지 구현
 
 #### 신기능: 알고리즘별 추천 종목 조회 페이지
