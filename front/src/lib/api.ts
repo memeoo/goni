@@ -174,3 +174,22 @@ export const stocksInfoAPI = {
   getStockInfoByCode: (code: string) =>
     api.get(`/api/stocks-info/${code}`),
 }
+
+export const recStocksAPI = {
+  getRecStocks: (skip = 0, limit = 100) =>
+    api.get(`/api/rec-stocks?skip=${skip}&limit=${limit}`),
+  getRecStockById: (recStockId: number) =>
+    api.get(`/api/rec-stocks/${recStockId}`),
+  getRecStocksByAlgorithm: (algorithmId: number, skip = 0, limit = 100) =>
+    api.get(`/api/rec-stocks/algorithm/${algorithmId}?skip=${skip}&limit=${limit}`),
+  getRecStocksByDate: (date: string, skip = 0, limit = 100) =>
+    api.get(`/api/rec-stocks/date/${date}?skip=${skip}&limit=${limit}`),
+  getLatestRecStocks: (days = 7, skip = 0, limit = 100) =>
+    api.get(`/api/rec-stocks/latest/${days}?skip=${skip}&limit=${limit}`),
+  createRecStock: (recStockData: any) =>
+    api.post('/api/rec-stocks', recStockData),
+  updateRecStock: (recStockId: number, recStockData: any) =>
+    api.put(`/api/rec-stocks/${recStockId}`, recStockData),
+  deleteRecStock: (recStockId: number) =>
+    api.delete(`/api/rec-stocks/${recStockId}`),
+}
