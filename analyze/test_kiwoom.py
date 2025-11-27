@@ -149,9 +149,95 @@ def test_condition_list():
     print("=" * 60)
 
 
+def test_condition_search():
+    """조건 검색 요청 테스트"""
+
+    # API 설정
+    APP_KEY = 'KY7QbSwIVVmjqBM5jIZHbcGOle2O8nQL7dFUNtVmTKU'
+    SECRET_KEY = 'KUwnffZOR2dP4nwEZCIgTAhu-FquHEa2Xx9mCKE9ak0'
+    ACCOUNT_NO = '52958566'
+
+    # API 인스턴스 생성 (실전투자)
+    api = KiwoomAPI(
+        app_key=APP_KEY,
+        secret_key=SECRET_KEY,
+        account_no=ACCOUNT_NO,
+        use_mock=False
+    )
+
+    print("=" * 60)
+    print("조건 검색 요청 테스트")
+    print("=" * 60)
+
+    # 1. 조건 검색 목록 조회
+    print("\n[1단계] 조건 검색 목록 조회...")
+    conditions = api.get_condition_list(use_mock=False)
+
+    if not conditions:
+        print("✗ 조건 검색 목록 조회 실패")
+        return
+
+    print(f"✓ 조건 검색 목록 조회 성공 (총 {len(conditions)}개)")
+
+    # 2. 첫 번째 조건으로 검색
+    condition_id = conditions[0]['id']
+    condition_name = conditions[0]['name']
+
+    print(f"\n[2단계] 조건식으로 종목 검색...")
+    print(f"  조건명: {condition_name}")
+    print(f"  조건ID: {condition_id}")
+
+    results = api.search_condition(
+        condition_id=condition_id,
+        search_type='0',
+        stock_exchange_type='K'
+    )
+
+    if results is None:
+        print("✗ 조건 검색 실패")
+        return
+
+    print(f"✓ 조건 검색 성공 (총 {len(results)}개 종목)\n")
+
+    if len(results) > 0:
+        print("검색 결과 (상위 10개):")
+        print("-" * 60)
+        print(f"{'No':3s} | {'종목명':12s} | {'종목코드':8s} | {'현재가':12s} | 상태")
+        print("-" * 60)
+
+        for i, stock in enumerate(results[:10], 1):
+            print(f"{i:3d} | {stock['stock_name']:12s} | {stock['stock_code']:8s} | "
+                  f"{stock['current_price']:12,.0f} | {stock['status']}")
+
+        if len(results) > 10:
+            print(f"... 외 {len(results) - 10}개 더 있습니다")
+    else:
+        print("검색 결과가 없습니다")
+
+    # 3. 코스닥에서만 검색
+    print(f"\n[3단계] 코스닥에서만 검색...")
+    results_kosdaq = api.search_condition(
+        condition_id=condition_id,
+        search_type='0',
+        stock_exchange_type='Q'
+    )
+
+    if results_kosdaq is not None:
+        print(f"✓ 코스닥 검색 성공 (총 {len(results_kosdaq)}개 종목)")
+    else:
+        print("✗ 코스닥 검색 실패")
+
+    print("\n" + "=" * 60)
+    print("테스트 완료")
+    print("=" * 60)
+
+
 if __name__ == '__main__':
     # 기존 테스트 실행
     # test_kiwoom_api()
 
     # 조건 검색 목록 테스트 실행
-    test_condition_list()
+    # test_condition_list()
+
+    # 조건 검색 요청 테스트 실행
+    test_condition_search()

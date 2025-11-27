@@ -225,11 +225,13 @@ GET /api/rec-stocks?from_date=2025-11-20&to_date=2025-11-27
 
 ---
 
-### 2025-11-27: 키움증권 조건 검색 목록 조회 WebSocket Wrapper 함수 구현
+### 2025-11-27: 키움증권 조건 검색 WebSocket Wrapper 함수 구현 (CNSRLST, CNSRREQ)
 
-#### 신기능: 키움 조건 검색 목록 조회
+#### 신기능: 키움 조건 검색 목록 조회 및 조건 검색 요청
 
-**목적**: 사용자가 키움증권에 저장한 조건 검색식 목록을 조회하는 기능 제공
+**목적**:
+- 사용자가 키움증권에 저장한 조건 검색식 목록을 조회
+- 조건식으로 종목을 검색하여 조건을 만족하는 종목 조회
 
 **구현 내용**:
 
@@ -241,10 +243,12 @@ GET /api/rec-stocks?from_date=2025-11-20&to_date=2025-11-27
      - `send_message()`: 서버로 메시지 전송
      - `receive_messages()`: 서버 응답 수신 (백그라운드 태스크)
      - `request_condition_list()`: 조건 검색 목록 조회 (CNSRLST TR)
+     - `request_condition_search()`: 조건식으로 종목 검색 (CNSRREQ TR)
      - `disconnect()`: 연결 종료
 
 2. **KiwoomAPI 확장 메서드**:
-   - `get_condition_list(use_mock=False)`: 조건 검색 목록 조회 wrapper 함수
+
+   a. `get_condition_list(use_mock=False)`: 조건 검색 목록 조회
    - 기능:
      - REST API로 접근 토큰 자동 발급
      - WebSocket으로 조건 검색 목록 조회
@@ -258,8 +262,27 @@ GET /api/rec-stocks?from_date=2025-11-20&to_date=2025-11-27
      ]
      ```
 
+   b. `search_condition(condition_id, search_type='0', stock_exchange_type='K', use_mock=False)`: 조건식으로 종목 검색
+   - 인자:
+     - `condition_id`: 조건식 ID (get_condition_list()에서 조회)
+     - `search_type`: 조회 타입 ('0': 일반)
+     - `stock_exchange_type`: 거래소 구분 ('K': 코스피, 'Q': 코스닥, '%': 전체)
+   - 반환 형식:
+     ```python
+     [
+         {
+             'stock_code': '005930',        # 종목코드
+             'stock_name': '삼성전자',       # 종목명
+             'current_price': 75000.0,      # 현재가
+             'status': '5',                 # 상태값
+             'raw_data': {...}             # 원본 응답 데이터
+         },
+         ...
+     ]
+     ```
+
 3. **테스트 및 검증**:
-   - `analyze/test_kiwoom.py`에 `test_condition_list()` 함수 추가
+   - `analyze/test_kiwoom.py`에 `test_condition_list()`, `test_condition_search()` 함수 추가
    - 실제 키움 계정의 8개 조건 검색식 정상 조회 확인:
      - 장기횡보1_이격도기준
      - 장기횡보2_대상변경
@@ -272,7 +295,7 @@ GET /api/rec-stocks?from_date=2025-11-20&to_date=2025-11-27
 
 **기술 세부사항**:
 
-- **WebSocket 통신 흐름**:
+- **WebSocket 통신 흐름 (CNSRLST)**:
   1. 접근 토큰 발급 (REST API)
   2. WebSocket 서버 연결
   3. 로그인 패킷 전송 (토큰 사용)
@@ -281,14 +304,24 @@ GET /api/rec-stocks?from_date=2025-11-20&to_date=2025-11-27
   6. 응답 수신 (최대 5초 타임아웃)
   7. 백그라운드에서 PING 자동 응답 처리
 
+- **WebSocket 통신 흐름 (CNSRREQ)**:
+  1. 접근 토큰 발급 (REST API)
+  2. WebSocket 서버 연결
+  3. 로그인 패킷 전송 (토큰 사용)
+  4. 로그인 응답 대기
+  5. CNSRREQ (조건 검색 요청) 전송
+  6. 응답 수신 (최대 15초 타임아웃)
+  7. 종목 데이터 파싱 및 반환
+
 - **에러 처리**:
   - 토큰 발급 실패: None 반환
   - 로그인 실패: 로그 기록 및 연결 종료
   - 요청 타임아웃: 타임아웃 로그 기록 후 None 반환
+  - 데이터 파싱 오류: 개별 항목만 스킵하고 나머지 처리
 
 **파일 변경**:
-- ✅ `analyze/lib/kiwoom.py`: `KiwoomWebSocketClient` 클래스 및 `get_condition_list()` 메서드 추가
-- ✅ `analyze/test_kiwoom.py`: `test_condition_list()` 함수 추가
+- ✅ `analyze/lib/kiwoom.py`: `KiwoomWebSocketClient` 클래스 확장, `search_condition()` 메서드 추가
+- ✅ `analyze/test_kiwoom.py`: `test_condition_search()` 함수 추가
 
 **사용 예제**:
 
@@ -296,12 +329,31 @@ GET /api/rec-stocks?from_date=2025-11-20&to_date=2025-11-27
 from lib.kiwoom import KiwoomAPI
 
 api = KiwoomAPI(app_key, secret_key, account_no)
-conditions = api.get_condition_list()
 
+# 1. 조건 검색 목록 조회
+conditions = api.get_condition_list()
 if conditions:
     for condition in conditions:
         print(f"ID: {condition['id']}, 이름: {condition['name']}")
+
+# 2. 특정 조건식으로 종목 검색
+if conditions:
+    results = api.search_condition(conditions[0]['id'])
+    if results:
+        for stock in results:
+            print(f"{stock['stock_name']}({stock['stock_code']}): {stock['current_price']:,.0f}원")
+
+# 3. 코스닥에서만 검색
+results_kosdaq = api.search_condition(conditions[0]['id'], stock_exchange_type='Q')
+
+# 4. 전체 거래소에서 검색
+results_all = api.search_condition(conditions[0]['id'], stock_exchange_type='%')
 ```
+
+**주의사항**:
+- CNSRREQ (조건 검색 요청)의 응답 형식은 키움증권 실시간 API 상태에 따라 다를 수 있습니다
+- 대량의 검색 결과가 있을 경우 응답 시간이 길어질 수 있습니다 (타임아웃: 15초)
+- 연속조회 기능은 향후 구현 예정입니다
 
 ---
 

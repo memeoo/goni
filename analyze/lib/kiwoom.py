@@ -64,6 +64,10 @@ class KiwoomWebSocketClient:
         """서버에서 오는 메시지를 수신합니다."""
         while self.keep_running:
             try:
+                if not self.websocket:
+                    await asyncio.sleep(0.1)
+                    continue
+
                 response = json.loads(await self.websocket.recv())
                 logger.debug(f'WebSocket 응답 수신: {response}')
 
@@ -85,11 +89,19 @@ class KiwoomWebSocketClient:
 
                 # PING이 아닌 경우만 로깅
                 if response.get('trnm') != 'PING':
-                    logger.info(f'WebSocket 응답: {response}')
+                    # 응답 유형별 로깅
+                    trnm = response.get('trnm')
+                    if trnm in ['CNSRLST', 'CNSRREQ']:
+                        logger.info(f'WebSocket 응답 [CNSRREQ/CNSRLST]: {response}')
+                    else:
+                        logger.info(f'WebSocket 응답 [{trnm}]: {response}')
 
             except websockets.ConnectionClosed:
                 logger.error('WebSocket 연결이 서버에 의해 종료됨')
                 self.connected = False
+                return False
+            except asyncio.CancelledError:
+                logger.debug('메시지 수신 태스크가 취소됨')
                 return False
             except Exception as e:
                 logger.error(f'WebSocket 메시지 수신 오류: {e}')
@@ -152,6 +164,95 @@ class KiwoomWebSocketClient:
 
         except Exception as e:
             logger.error(f"조건 검색 목록 조회 실패: {e}")
+            return None
+        finally:
+            await self.disconnect()
+
+    async def request_condition_search(
+        self,
+        condition_id: str,
+        search_type: str = '0',
+        stock_exchange_type: str = 'K',
+        cont_yn: str = 'N',
+        next_key: str = ''
+    ) -> Optional[Dict[str, Any]]:
+        """
+        조건식으로 종목을 검색합니다 (CNSRREQ).
+
+        Args:
+            condition_id: 조건식 ID (조건 검색 목록에서 조회한 ID)
+            search_type: 조회 타입 ('0': 일반, '1': 실시간 등)
+            stock_exchange_type: 거래소 구분 ('K': 코스피, 'Q': 코스닥, '%': 전체)
+            cont_yn: 연속조회여부 ('N': 아니오, 'Y': 예)
+            next_key: 연속조회키 (연속조회시 사용)
+
+        Returns:
+            dict: 조건 검색 결과
+                {
+                    'return_code': 0,
+                    'return_msg': '',
+                    'seq': '조건식번호',
+                    'cont_yn': 'N',
+                    'next_key': '',
+                    'data': [
+                        {
+                            '9001': 'A005930',           # 종목코드
+                            '302': '삼성전자',           # 종목명
+                            '10': '000075000',          # 현재가
+                            '25': '5',                  # 상태값
+                            '11': '-00000100',          # 기타필드들...
+                            ...
+                        },
+                        ...
+                    ]
+                }
+                실패시 None
+        """
+        try:
+            await self.connect()
+
+            # 메시지 수신 태스크를 백그라운드에서 실행
+            receive_task = asyncio.create_task(self.receive_messages())
+
+            # 로그인 응답 대기
+            await asyncio.sleep(2)
+
+            # 조건 검색 요청
+            request_param = {
+                'trnm': 'CNSRREQ',
+                'seq': condition_id,  # 조건식 일련번호
+                'search_type': search_type,  # 조회 타입
+                'stex_tp': stock_exchange_type,  # 거래소 구분
+                'cont_yn': cont_yn,  # 연속조회여부
+                'next_key': next_key  # 연속조회키
+            }
+
+            logger.info(f"조건 검색 요청 시작: condition_id={condition_id}, search_type={search_type}, stex_tp={stock_exchange_type}")
+            await self.send_message(request_param)
+
+            # 응답 대기 (최대 15초)
+            for _ in range(150):  # 15초간 대기
+                if self.response_data and self.response_data.get('trnm') == 'CNSRREQ':
+                    response = self.response_data
+                    self.response_data = None  # 응답 초기화
+
+                    # 응답 검증
+                    if response.get('return_code') != 0:
+                        logger.error(f"조건 검색 요청 오류: {response.get('return_msg', 'Unknown error')}")
+                        return None
+
+                    data = response.get('data', [])
+                    logger.info(f"조건 검색 결과: 총 {len(data)}개 종목, 연속조회={response.get('cont_yn')}")
+
+                    return response
+
+                await asyncio.sleep(0.1)
+
+            logger.error("조건 검색 요청 타임아웃")
+            return None
+
+        except Exception as e:
+            logger.error(f"조건 검색 요청 실패: {e}")
             return None
         finally:
             await self.disconnect()
@@ -740,6 +841,114 @@ class KiwoomAPI:
 
         except Exception as e:
             logger.error(f"조건 검색 목록 조회 실패: {e}")
+            return None
+
+    def search_condition(
+        self,
+        condition_id: str,
+        search_type: str = '0',
+        stock_exchange_type: str = 'K',
+        use_mock: bool = False
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        조건식으로 종목을 검색합니다 (CNSRREQ).
+
+        조건 검색 목록에서 조회한 조건식으로 해당 조건을 만족하는 종목을 검색합니다.
+
+        Args:
+            condition_id: 조건식 ID (get_condition_list()에서 조회한 'id' 값)
+            search_type: 조회 타입 (기본값: '0')
+                - '0': 일반 조회
+                - '1': 실시간 조회 등
+            stock_exchange_type: 거래소 구분 (기본값: 'K')
+                - 'K': 코스피
+                - 'Q': 코스닥
+                - '%': 전체
+            use_mock: 모의투자 여부 (True: 모의투자, False: 실전투자)
+
+        Returns:
+            list: 검색 결과 종목 리스트
+                [
+                    {
+                        'stock_code': 'A005930',      # 종목코드
+                        'stock_name': '삼성전자',      # 종목명
+                        'current_price': 75000,       # 현재가
+                        'status': 5,                   # 상태값
+                        'raw_data': {...}             # 원본 응답 데이터
+                    },
+                    ...
+                ]
+                실패시 None
+
+        Example:
+            >>> api = KiwoomAPI(app_key, secret_key, account_no)
+            >>> conditions = api.get_condition_list()
+            >>> if conditions:
+            ...     results = api.search_condition(conditions[0]['id'])
+            ...     if results:
+            ...         for stock in results:
+            ...             print(f"{stock['stock_name']}({stock['stock_code']}): {stock['current_price']}")
+        """
+        try:
+            # 접근 토큰 발급
+            token = self.get_access_token()
+            if not token:
+                logger.error("유효한 토큰이 없습니다")
+                return None
+
+            # WebSocket 클라이언트 생성
+            ws_client = KiwoomWebSocketClient(access_token=token, use_mock=use_mock)
+
+            # 비동기 함수 실행
+            response = asyncio.run(ws_client.request_condition_search(
+                condition_id=condition_id,
+                search_type=search_type,
+                stock_exchange_type=stock_exchange_type
+            ))
+
+            if not response:
+                logger.warning("조건 검색 결과가 없거나 조회 실패")
+                return None
+
+            # 응답 데이터 파싱
+            data = response.get('data', [])
+            if not data:
+                logger.info(f"조건식 {condition_id}으로 검색한 결과가 없습니다")
+                return []
+
+            # 응답 데이터를 사용하기 쉬운 형식으로 변환
+            formatted_stocks = []
+            for stock_data in data:
+                try:
+                    # 종목코드에서 'A' 접두사 제거
+                    stock_code = stock_data.get('9001', '').replace('A', '')
+                    stock_name = stock_data.get('302', '')
+                    current_price_str = stock_data.get('10', '0').strip()
+                    status = stock_data.get('25', '')
+
+                    # 현재가를 숫자로 변환
+                    try:
+                        current_price = float(current_price_str) if current_price_str else 0.0
+                    except (ValueError, TypeError):
+                        current_price = 0.0
+
+                    formatted_stocks.append({
+                        'stock_code': stock_code,
+                        'stock_name': stock_name,
+                        'current_price': current_price,
+                        'status': status,
+                        'raw_data': stock_data  # 원본 데이터 포함
+                    })
+
+                except Exception as e:
+                    logger.warning(f"종목 데이터 파싱 오류: {stock_data}, {e}")
+                    continue
+
+            logger.info(f"조건식 {condition_id}으로 {len(formatted_stocks)}개 종목 검색 완료")
+            return formatted_stocks
+
+        except Exception as e:
+            logger.error(f"조건 검색 실패: {e}")
             return None
 
 
