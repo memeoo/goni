@@ -5,10 +5,156 @@
 import requests
 import json
 import logging
+import asyncio
+import websockets
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
+
+class KiwoomWebSocketClient:
+    """키움증권 WebSocket 실시간 데이터 클라이언트"""
+
+    def __init__(self, access_token: str, use_mock: bool = False):
+        """
+        Args:
+            access_token: 키움증권 API 접근 토큰
+            use_mock: 모의투자 여부 (True: 모의투자, False: 실전투자)
+        """
+        self.access_token = access_token
+        self.websocket_url = 'wss://mockapi.kiwoom.com:10000/api/dostk/websocket' if use_mock else 'wss://api.kiwoom.com:10000/api/dostk/websocket'
+        self.websocket = None
+        self.connected = False
+        self.keep_running = True
+        self.response_data = None
+
+    async def connect(self):
+        """WebSocket 서버에 연결합니다."""
+        try:
+            self.websocket = await websockets.connect(self.websocket_url)
+            self.connected = True
+            logger.info("WebSocket 서버에 연결했습니다")
+
+            # 로그인 패킷 전송
+            login_param = {
+                'trnm': 'LOGIN',
+                'token': self.access_token
+            }
+
+            logger.info('WebSocket 로그인 패킷을 전송합니다')
+            await self.send_message(login_param)
+
+        except Exception as e:
+            logger.error(f'WebSocket 연결 오류: {e}')
+            self.connected = False
+            raise
+
+    async def send_message(self, message: Dict[str, Any]):
+        """서버에 메시지를 보냅니다."""
+        if not self.connected:
+            await self.connect()
+
+        if self.connected:
+            message_str = json.dumps(message)
+            await self.websocket.send(message_str)
+            logger.debug(f'메시지 전송: {message_str}')
+
+    async def receive_messages(self):
+        """서버에서 오는 메시지를 수신합니다."""
+        while self.keep_running:
+            try:
+                response = json.loads(await self.websocket.recv())
+                logger.debug(f'WebSocket 응답 수신: {response}')
+
+                # 로그인 응답 처리
+                if response.get('trnm') == 'LOGIN':
+                    if response.get('return_code') != 0:
+                        logger.error(f'로그인 실패: {response.get("return_msg")}')
+                        await self.disconnect()
+                        return False
+                    else:
+                        logger.info('로그인 성공')
+
+                # PING 응답 처리 (PING을 받으면 그대로 다시 보내기)
+                elif response.get('trnm') == 'PING':
+                    await self.send_message(response)
+
+                # 응답 데이터 저장
+                self.response_data = response
+
+                # PING이 아닌 경우만 로깅
+                if response.get('trnm') != 'PING':
+                    logger.info(f'WebSocket 응답: {response}')
+
+            except websockets.ConnectionClosed:
+                logger.error('WebSocket 연결이 서버에 의해 종료됨')
+                self.connected = False
+                return False
+            except Exception as e:
+                logger.error(f'WebSocket 메시지 수신 오류: {e}')
+                return False
+
+    async def disconnect(self):
+        """WebSocket 연결을 종료합니다."""
+        self.keep_running = False
+        if self.connected and self.websocket:
+            await self.websocket.close()
+            self.connected = False
+            logger.info('WebSocket 연결을 종료했습니다')
+
+    async def request_condition_list(self) -> Optional[List[List[str]]]:
+        """
+        조건 검색 목록을 조회합니다 (CNSRLST).
+
+        Returns:
+            list: 조건 검색 목록
+                [
+                    ['0', '조건1'],
+                    ['1', '조건2'],
+                    ...
+                ]
+                실패시 None
+        """
+        try:
+            await self.connect()
+
+            # 메시지 수신 태스크를 백그라운드에서 실행
+            receive_task = asyncio.create_task(self.receive_messages())
+
+            # 로그인 응답 대기 (최대 5초)
+            await asyncio.sleep(1)
+
+            # 조건 검색 목록 요청
+            request_param = {'trnm': 'CNSRLST'}
+            await self.send_message(request_param)
+
+            # 응답 대기 (최대 5초)
+            for _ in range(50):  # 5초간 대기
+                if self.response_data and self.response_data.get('trnm') == 'CNSRLST':
+                    response = self.response_data
+                    self.response_data = None  # 응답 초기화
+
+                    # 응답 검증
+                    if response.get('return_code') != 0:
+                        logger.error(f"조건 검색 목록 조회 오류: {response.get('return_msg', 'Unknown error')}")
+                        return None
+
+                    condition_list = response.get('data', [])
+                    logger.info(f"조건 검색 목록 조회 성공: 총 {len(condition_list)}개")
+
+                    return condition_list
+
+                await asyncio.sleep(0.1)
+
+            logger.error("조건 검색 목록 조회 타임아웃")
+            return None
+
+        except Exception as e:
+            logger.error(f"조건 검색 목록 조회 실패: {e}")
+            return None
+        finally:
+            await self.disconnect()
 
 
 class KiwoomAPI:
@@ -530,6 +676,71 @@ class KiwoomAPI:
         all_trades.sort(key=lambda x: x['datetime'], reverse=True)
 
         return all_trades
+
+    def get_condition_list(self, use_mock: bool = False) -> Optional[List[Dict[str, Any]]]:
+        """
+        사용자가 키움에 설정한 조건 검색 목록을 조회합니다.
+
+        이 메서드는 WebSocket을 사용하여 실시간으로 조건 검색 목록을 가져옵니다.
+        비동기 작업이므로 asyncio 이벤트 루프가 필요합니다.
+
+        Args:
+            use_mock: 모의투자 여부 (True: 모의투자, False: 실전투자)
+
+        Returns:
+            list: 조건 검색 목록
+                [
+                    {
+                        'id': '0',
+                        'name': '조건1'
+                    },
+                    {
+                        'id': '1',
+                        'name': '조건2'
+                    },
+                    ...
+                ]
+                실패시 None
+
+        Example:
+            >>> api = KiwoomAPI(app_key, secret_key, account_no)
+            >>> conditions = api.get_condition_list()
+            >>> if conditions:
+            ...     for condition in conditions:
+            ...         print(f"조건 ID: {condition['id']}, 조건명: {condition['name']}")
+        """
+        try:
+            # 접근 토큰 발급
+            token = self.get_access_token()
+            if not token:
+                logger.error("유효한 토큰이 없습니다")
+                return None
+
+            # WebSocket 클라이언트 생성
+            ws_client = KiwoomWebSocketClient(access_token=token, use_mock=use_mock)
+
+            # 비동기 함수 실행
+            condition_list = asyncio.run(ws_client.request_condition_list())
+
+            if not condition_list:
+                logger.warning("조건 검색 목록이 없거나 조회 실패")
+                return None
+
+            # 응답 데이터를 딕셔너리 리스트로 변환
+            formatted_conditions = []
+            for condition in condition_list:
+                if isinstance(condition, list) and len(condition) >= 2:
+                    formatted_conditions.append({
+                        'id': condition[0],
+                        'name': condition[1]
+                    })
+
+            logger.info(f"조건 검색 목록 포맷팅 완료: {len(formatted_conditions)}개")
+            return formatted_conditions
+
+        except Exception as e:
+            logger.error(f"조건 검색 목록 조회 실패: {e}")
+            return None
 
 
 if __name__ == '__main__':

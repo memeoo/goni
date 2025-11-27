@@ -106,6 +106,86 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-27: 키움증권 조건 검색 목록 조회 WebSocket Wrapper 함수 구현
+
+#### 신기능: 키움 조건 검색 목록 조회
+
+**목적**: 사용자가 키움증권에 저장한 조건 검색식 목록을 조회하는 기능 제공
+
+**구현 내용**:
+
+1. **WebSocket 클라이언트 (`KiwoomWebSocketClient`)**:
+   - `analyze/lib/kiwoom.py`에 새로운 클래스 추가
+   - 키움증권 WebSocket API 연결 및 통신 관리
+   - 메서드:
+     - `connect()`: WebSocket 서버 연결 및 로그인
+     - `send_message()`: 서버로 메시지 전송
+     - `receive_messages()`: 서버 응답 수신 (백그라운드 태스크)
+     - `request_condition_list()`: 조건 검색 목록 조회 (CNSRLST TR)
+     - `disconnect()`: 연결 종료
+
+2. **KiwoomAPI 확장 메서드**:
+   - `get_condition_list(use_mock=False)`: 조건 검색 목록 조회 wrapper 함수
+   - 기능:
+     - REST API로 접근 토큰 자동 발급
+     - WebSocket으로 조건 검색 목록 조회
+     - 응답 데이터를 사용하기 쉬운 딕셔너리 형식으로 변환
+   - 반환 형식:
+     ```python
+     [
+         {'id': '0', 'name': '조건1'},
+         {'id': '1', 'name': '조건2'},
+         ...
+     ]
+     ```
+
+3. **테스트 및 검증**:
+   - `analyze/test_kiwoom.py`에 `test_condition_list()` 함수 추가
+   - 실제 키움 계정의 8개 조건 검색식 정상 조회 확인:
+     - 장기횡보1_이격도기준
+     - 장기횡보2_대상변경
+     - 단타_BASIC_SIMPLE01
+     - 단타_BASIC_SIMPLE01_코스피
+     - 단타_BASIC_SIMPLE01_코스피_02
+     - 단타:5일선120선골든크로스거래량3배
+     - 창원개미_단타
+     - 신고가 돌파
+
+**기술 세부사항**:
+
+- **WebSocket 통신 흐름**:
+  1. 접근 토큰 발급 (REST API)
+  2. WebSocket 서버 연결
+  3. 로그인 패킷 전송 (토큰 사용)
+  4. 로그인 응답 대기
+  5. CNSRLST 요청 전송
+  6. 응답 수신 (최대 5초 타임아웃)
+  7. 백그라운드에서 PING 자동 응답 처리
+
+- **에러 처리**:
+  - 토큰 발급 실패: None 반환
+  - 로그인 실패: 로그 기록 및 연결 종료
+  - 요청 타임아웃: 타임아웃 로그 기록 후 None 반환
+
+**파일 변경**:
+- ✅ `analyze/lib/kiwoom.py`: `KiwoomWebSocketClient` 클래스 및 `get_condition_list()` 메서드 추가
+- ✅ `analyze/test_kiwoom.py`: `test_condition_list()` 함수 추가
+
+**사용 예제**:
+
+```python
+from lib.kiwoom import KiwoomAPI
+
+api = KiwoomAPI(app_key, secret_key, account_no)
+conditions = api.get_condition_list()
+
+if conditions:
+    for condition in conditions:
+        print(f"ID: {condition['id']}, 이름: {condition['name']}")
+```
+
+---
+
 ### 2025-11-14: 알고리즘 DB 테이블 및 추천 페이지 구현
 
 #### 신기능: 알고리즘 종목 추천 시스템

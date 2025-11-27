@@ -113,5 +113,45 @@ def test_kiwoom_api():
     print("=" * 60)
 
 
+def test_condition_list():
+    """조건 검색 목록 조회 테스트"""
+
+    # API 설정
+    APP_KEY = 'KY7QbSwIVVmjqBM5jIZHbcGOle2O8nQL7dFUNtVmTKU'
+    SECRET_KEY = 'KUwnffZOR2dP4nwEZCIgTAhu-FquHEa2Xx9mCKE9ak0'
+    ACCOUNT_NO = '52958566'
+
+    # API 인스턴스 생성 (실전투자)
+    api = KiwoomAPI(
+        app_key=APP_KEY,
+        secret_key=SECRET_KEY,
+        account_no=ACCOUNT_NO,
+        use_mock=False
+    )
+
+    print("=" * 60)
+    print("조건 검색 목록 조회 테스트")
+    print("=" * 60)
+
+    conditions = api.get_condition_list(use_mock=False)
+
+    if conditions:
+        print(f"\n✓ 조회 성공 (총 {len(conditions)}개)\n")
+        print("조건 검색 목록:")
+        print("-" * 60)
+        for i, condition in enumerate(conditions, 1):
+            print(f"{i}. ID: {condition['id']:3s} | 조건명: {condition['name']}")
+    else:
+        print("\n✗ 조회 실패 또는 조건이 없습니다")
+
+    print("\n" + "=" * 60)
+    print("테스트 완료")
+    print("=" * 60)
+
+
 if __name__ == '__main__':
-    test_kiwoom_api()
+    # 기존 테스트 실행
+    # test_kiwoom_api()
+
+    # 조건 검색 목록 테스트 실행
+    test_condition_list()
