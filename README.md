@@ -106,6 +106,95 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-27: 알고리즘별 추천 종목 리스트 페이지 구현
+
+#### 신기능: 알고리즘별 추천 종목 조회 페이지
+
+**목적**: 알고리즘 추천 페이지에서 특정 알고리즘을 클릭하면 해당 알고리즘이 추천하는 모든 종목을 날짜별로 그룹핑하여 표시
+
+**구현 내용**:
+
+1. **Frontend API 함수 추가** (`front/src/lib/api.ts`):
+   - `recStocksAPI` 객체 추가
+   - 메서드:
+     - `getRecStocks()`: 모든 추천 종목 조회
+     - `getRecStockById()`: 특정 추천 종목 조회
+     - `getRecStocksByAlgorithm()`: 알고리즘별 추천 종목 조회
+     - `getRecStocksByDate()`: 날짜별 추천 종목 조회
+     - `getLatestRecStocks()`: 최근 N일 추천 종목 조회
+     - CRUD 작업 함수
+
+2. **AlgorithmCard 수정** (`front/src/components/algorithm-card.tsx`):
+   - 클릭 이벤트 핸들러 추가
+   - 기본 동작: `/recommendation/[algorithmId]` 페이지로 이동
+   - 커스텀 onClick 핸들러 지원
+   - hover 효과 개선 (border 색상 변경)
+
+3. **알고리즘 상세 페이지 신규 생성** (`front/src/app/recommendation/[algorithmId]/page.tsx`):
+   - 동적 라우팅으로 algorithmId 파라미터 처리
+   - rec_stocks API로 데이터 조회
+   - 날짜별 그룹핑 및 정렬 (최신순)
+   - 반응형 레이아웃 (모바일/태블릿/데스크톱)
+
+4. **주요 기능**:
+   - **데이터 표시**:
+     - 알고리즘 이름 및 설명
+     - 총 추천 종목 개수
+     - 날짜별 추천 종목 그룹
+
+   - **종목 정보**:
+     - 종목명 및 종목코드
+     - 당일 종가
+     - 전일비 (% 단위, 색상 코딩)
+       - 상승: 빨간색
+       - 하락: 파란색
+
+   - **네비게이션**:
+     - 뒤로가기 버튼
+     - Header 네비게이션 (refresh, strategy manage 등)
+
+   - **상태 관리**:
+     - 로딩 중 스피너 표시
+     - 오류 처리 및 피드백
+     - 데이터 없음 메시지
+
+**파일 변경**:
+- ✅ `front/src/lib/api.ts`: `recStocksAPI` 객체 추가 (8개 메서드)
+- ✅ `front/src/components/algorithm-card.tsx`: 클릭 이벤트 및 네비게이션 추가
+- ✅ `front/src/app/recommendation/[algorithmId]/page.tsx`: 알고리즘 상세 페이지 신규 생성
+
+**UI/UX 특징**:
+- 반응형 그리드: 모바일(1열) → 태블릿(2열) → 데스크톱(3-4열)
+- 날짜별 섹션 분리 (캘린더 아이콘)
+- 각 날짜별 종목 개수 표시 (배지)
+- 종목 카드: 호버 시 shadow 효과
+- 색상 코딩: 상승(빨강)/하락(파랑) 명확한 구분
+- 로딩 및 에러 상태 친화적 UI
+
+**데이터 흐름**:
+```
+AlgorithmCard (클릭)
+    ↓
+/recommendation/[algorithmId] 페이지로 이동
+    ↓
+recStocksAPI.getRecStocksByAlgorithm(algorithmId) 호출
+    ↓
+rec_stocks 테이블에서 데이터 조회
+    ↓
+날짜별 그룹핑 및 정렬 (최신순)
+    ↓
+UI에 렌더링
+```
+
+**사용 흐름**:
+1. 추천 페이지에서 알고리즘 카드 클릭
+2. 해당 알고리즘의 추천 종목 상세 페이지로 이동
+3. 날짜별로 그룹핑된 종목 목록 표시
+4. 각 종목의 기본 정보(종가, 전일비) 확인
+5. 뒤로가기 버튼으로 추천 페이지로 복귀
+
+---
+
 ### 2025-11-27: 추천 종목(rec_stocks) 테이블 및 API 구현
 
 #### 신기능: 추천 종목 관리 시스템
