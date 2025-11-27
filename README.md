@@ -106,6 +106,70 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-27: 추천 종목 정기 업데이트 스케줄러 구현
+
+#### 신기능: 매일 18:10에 자동으로 추천 종목 업데이트 (토일 제외)
+
+**목적**: 매일 시장 종료 시간(18:10)에 키움 조건 검색 API를 통해 "신고가 돌파" 조건을 만족하는 종목들을 자동으로 검색하여 rec_stocks에 저장
+
+**구현 내용**:
+
+1. **Algorithm 테이블에 스케줄 정보 추가** (`back/app/models.py`):
+   - `update_time` (VARCHAR): 업데이트 시간 (HH:MM 형식, 예: "18:10")
+   - `issue_time` (VARCHAR): 발행 시간 (추가 정보용)
+   - 데이터베이스 마이그레이션 수행: `back/migrations/add_schedule_fields_to_algorithm.sql`
+
+2. **스케줄러 구현** (`back/app/scheduler.py`):
+   - `update_rec_stocks_job()`: 신고가 돌파 조건으로 종목 검색 및 업데이트
+   - `start_scheduler()`: APScheduler를 이용한 스케줄 설정
+   - `stop_scheduler()`: 애플리케이션 종료 시 스케줄러 정리
+
+3. **스케줄 설정**:
+   - **시간**: 매일 18:10 (Asia/Seoul 타임존)
+   - **제외 요일**: 토요일, 일요일
+   - **실행 요일**: 월요일 ~ 금요일
+   - **Cron 표현식**: `hour=18, minute=10, day_of_week='0-4'`
+
+4. **FastAPI 통합** (`back/main.py`):
+   - 애플리케이션 시작 시 `start_scheduler()` 호출
+   - 애플리케이션 종료 시 `stop_scheduler()` 호출
+   - Lifespan context manager를 통한 스케줄러 생명주기 관리
+
+5. **동작 흐름**:
+   ```
+   18:10 (평일) → 스케줄러 트리거
+      ↓
+   RecommendationService 생성
+      ↓
+   조건명 '신고가 돌파'로 조건 ID 조회
+      ↓
+   키움 API에서 종목 검색
+      ↓
+   기존 오늘 날짜 데이터 삭제
+      ↓
+   검색된 종목들을 rec_stocks에 저장
+      ↓
+   로그에 결과 기록
+   ```
+
+**알고리즘별 설정**:
+- **알고리즘 ID 1** (신고가 따라잡기):
+  - `update_time`: "18:10"
+  - 조건: '신고가 돌파'
+  - 거래소: 전체 (KOSPI + KOSDAQ)
+
+**모니터링**:
+- 모든 스케줄러 작업은 로그에 기록됨
+- 성공/실패 여부를 `[스케줄러]` 태그로 표시
+- 작업 실행 시간도 함께 기록
+
+**주의사항**:
+- 키움 API 조건 검색은 WebSocket 기반이므로 응답 시간이 걸릴 수 있음
+- 스케줄러는 FastAPI 애플리케이션 시작 시 자동 활성화됨
+- 환경변수 `KIWOOM_APP_KEY`, `KIWOOM_SECRET_KEY`, `KIWOOM_ACCOUNT_NO` 필수
+
+---
+
 ### 2025-11-27: 추천 종목 서비스 및 키움 조건 검색 통합
 
 #### 신기능: 키움 조건식으로 추천 종목 자동 업데이트
