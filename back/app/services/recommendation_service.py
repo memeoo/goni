@@ -76,6 +76,8 @@ class RecommendationService:
         """
         조건식으로 종목을 검색하고 rec_stocks 테이블에 저장합니다.
 
+        기존 데이터는 삭제하지 않고 누적되며, recommendation_date로 구분됩니다.
+
         Args:
             condition_name: 조건명 (예: '신고가 돌파')
             algorithm_id: 알고리즘 ID (rec_stocks의 algorithm_id)
@@ -118,17 +120,8 @@ class RecommendationService:
 
             logger.info(f"검색 결과: {len(search_results)}개 종목")
 
-            # 4. 기존 데이터 삭제 (같은 알고리즘, 오늘 날짜)
+            # 4. 오늘 날짜의 추천 종목 저장
             today = date.today()
-            deleted_count = db.query(RecStock).filter(
-                RecStock.algorithm_id == algorithm_id,
-                RecStock.recommendation_date == today
-            ).delete()
-
-            if deleted_count > 0:
-                logger.info(f"기존 추천 종목 {deleted_count}개 삭제")
-
-            # 5. 새 추천 종목 저장
             saved_count = 0
             for stock in search_results:
                 try:

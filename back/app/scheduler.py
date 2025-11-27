@@ -28,6 +28,7 @@ def update_rec_stocks_job():
     신고가 돌파 조건으로 추천 종목을 검색하고 업데이트합니다.
 
     매일 18:10에 실행되며, 토요일과 일요일은 제외됩니다.
+    기존 데이터는 삭제하지 않고 누적되며, recommendation_date로 구분됩니다.
     """
     try:
         logger.info(f"[스케줄러] 추천 종목 업데이트 작업 시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")

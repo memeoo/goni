@@ -75,7 +75,7 @@ def update_rec_stocks_by_condition(
     키움 조건식으로 추천 종목을 검색하고 업데이트합니다.
 
     조건식으로 해당 조건을 만족하는 종목들을 검색하여 rec_stocks 테이블에 저장합니다.
-    기존 같은 알고리즘의 오늘 날짜 추천 종목은 삭제됩니다.
+    기존 데이터는 삭제하지 않고 누적되며, recommendation_date로 구분됩니다.
 
     - **algorithm_id**: 알고리즘 ID (필수)
     - **condition_name**: 키움에 설정된 조건식 이름 (필수, 예: '신고가 돌파')
