@@ -198,3 +198,29 @@ class Algorithm(Base):
     # 시스템 정보
     created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
     updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    rec_stocks = relationship("RecStock", back_populates="algorithm")
+
+
+class RecStock(Base):
+    __tablename__ = "rec_stocks"
+
+    id = sa.Column(sa.Integer, primary_key=True, index=True)
+
+    # 종목 정보
+    stock_name = sa.Column(sa.String, nullable=False)  # 종목명
+    stock_code = sa.Column(sa.String, nullable=False, index=True)  # 종목코드
+
+    # 추천 정보
+    recommendation_date = sa.Column(sa.Date, nullable=False, index=True)  # 추천날짜
+    algorithm_id = sa.Column(sa.Integer, sa.ForeignKey("algorithm.id"), nullable=False, index=True)  # 추천 알고리즘 (FK)
+
+    # 종가 및 전일비
+    closing_price = sa.Column(sa.Float, nullable=False)  # 당일 종가
+    change_rate = sa.Column(sa.Float, nullable=True)  # 전일비 (%)
+
+    # 시스템 정보
+    created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
+    updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    algorithm = relationship("Algorithm", back_populates="rec_stocks")

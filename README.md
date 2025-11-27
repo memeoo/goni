@@ -106,6 +106,125 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-27: 추천 종목(rec_stocks) 테이블 및 API 구현
+
+#### 신기능: 추천 종목 관리 시스템
+
+**목적**: 알고리즘이 추천하는 종목들을 저장하고 관리하기 위한 기반 구축
+
+**구현 내용**:
+
+1. **Database Schema** (`rec_stocks` 테이블):
+   - 필드:
+     - `id`: 기본키 (SERIAL)
+     - `stock_name`: 종목명 (VARCHAR)
+     - `stock_code`: 종목코드 (VARCHAR, 인덱스)
+     - `recommendation_date`: 추천날짜 (DATE, 인덱스)
+     - `algorithm_id`: 추천 알고리즘 ID (INTEGER, FK → algorithm)
+     - `closing_price`: 당일 종가 (FLOAT)
+     - `change_rate`: 전일비 (%) (FLOAT, 선택사항)
+     - `created_at`, `updated_at`: 시스템 타임스탐프
+   - 인덱스:
+     - 단일: `stock_code`, `recommendation_date`, `algorithm_id`
+     - 복합: `(recommendation_date, stock_code)`, `(algorithm_id, recommendation_date)`
+
+2. **ORM Model** (`RecStock`):
+   - `back/app/models.py`에 `RecStock` 모델 추가
+   - `Algorithm` 모델과 양방향 관계 설정 (relationship)
+
+3. **Pydantic Schemas**:
+   - `RecStockBase`: 기본 정보
+   - `RecStockCreate`: 생성 요청
+   - `RecStockUpdate`: 수정 요청 (종가, 전일비만 수정 가능)
+   - `RecStock`: 조회 응답
+   - `RecStockWithAlgorithm`: 알고리즘 정보 포함 응답
+   - `AlgorithmBase`, `AlgorithmCreate`, `Algorithm`: 알고리즘 스키마 추가
+
+4. **API Endpoints** (`/api/rec-stocks`):
+   - **POST** `/api/rec-stocks`: 추천 종목 생성
+   - **GET** `/api/rec-stocks`: 추천 종목 목록 조회 (필터링/페이지네이션 지원)
+     - 필터: `stock_code`, `algorithm_id`, `recommendation_date`, `from_date`, `to_date`
+     - 페이지네이션: `skip`, `limit`
+   - **GET** `/api/rec-stocks/{rec_stock_id}`: 특정 추천 종목 조회
+   - **GET** `/api/rec-stocks/algorithm/{algorithm_id}`: 특정 알고리즘 추천 종목 조회
+   - **GET** `/api/rec-stocks/date/{recommendation_date}`: 특정 날짜 추천 종목 조회
+   - **GET** `/api/rec-stocks/latest/{days}`: 최근 N일 추천 종목 조회
+   - **PUT** `/api/rec-stocks/{rec_stock_id}`: 추천 종목 수정 (종가, 전일비)
+   - **DELETE** `/api/rec-stocks/{rec_stock_id}`: 추천 종목 삭제
+
+5. **주요 기능**:
+   - 다양한 필터링 옵션 (종목코드, 알고리즘, 날짜)
+   - 페이지네이션 지원 (최대 100개 조회)
+   - 날짜 범위 조회 지원
+   - 최근 종목 빠른 조회
+   - 알고리즘별 추천 종목 관리
+   - 체계적인 로깅
+
+**파일 변경**:
+- ✅ `back/create_rec_stocks_table.sql`: 테이블 및 인덱스 생성 SQL
+- ✅ `back/app/models.py`: `RecStock` ORM 모델 추가
+- ✅ `back/app/schemas.py`: Pydantic 스키마 추가
+- ✅ `back/app/routers/rec_stocks.py`: API 라우터 구현 (신규 파일)
+- ✅ `back/main.py`: `rec_stocks` 라우터 등록
+
+**사용 예제**:
+
+```python
+# 추천 종목 생성
+POST /api/rec-stocks
+{
+    "stock_name": "삼성전자",
+    "stock_code": "005930",
+    "recommendation_date": "2025-11-27",
+    "algorithm_id": 1,
+    "closing_price": 70500,
+    "change_rate": 2.5
+}
+
+# 최근 7일 추천 종목 조회
+GET /api/rec-stocks/latest/7?skip=0&limit=20
+
+# 특정 날짜 추천 종목 조회
+GET /api/rec-stocks/date/2025-11-27
+
+# 특정 알고리즘 추천 종목 조회
+GET /api/rec-stocks/algorithm/1
+
+# 날짜 범위로 조회
+GET /api/rec-stocks?from_date=2025-11-20&to_date=2025-11-27
+```
+
+**응답 형식**:
+```json
+{
+    "data": [
+        {
+            "id": 1,
+            "stock_name": "삼성전자",
+            "stock_code": "005930",
+            "recommendation_date": "2025-11-27",
+            "algorithm_id": 1,
+            "closing_price": 70500,
+            "change_rate": 2.5,
+            "created_at": "2025-11-27T13:00:00",
+            "updated_at": "2025-11-27T13:00:00",
+            "algorithm": {
+                "id": 1,
+                "name": "고니 퀀트 알고리즘 v1",
+                "description": "머신러닝 기반의 종목 추천 알고리즘",
+                "created_at": "2025-11-14T00:00:00",
+                "updated_at": "2025-11-14T00:00:00"
+            }
+        }
+    ],
+    "total": 100,
+    "skip": 0,
+    "limit": 20
+}
+```
+
+---
+
 ### 2025-11-27: 키움증권 조건 검색 목록 조회 WebSocket Wrapper 함수 구현
 
 #### 신기능: 키움 조건 검색 목록 조회

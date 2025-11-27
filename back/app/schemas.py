@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
 
 
@@ -265,6 +265,66 @@ class TradingStock(TradingStockBase):
     pur_amt: Optional[int] = None
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AlgorithmBase(BaseModel):
+    """알고리즘 기본 정보"""
+    name: str  # 알고리즘 이름
+    description: Optional[str] = None  # 알고리즘 설명
+
+
+class AlgorithmCreate(AlgorithmBase):
+    """알고리즘 생성"""
+    pass
+
+
+class Algorithm(AlgorithmBase):
+    """알고리즘 조회"""
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RecStockBase(BaseModel):
+    """추천 종목 기본 정보"""
+    stock_name: str  # 종목명
+    stock_code: str  # 종목코드
+    recommendation_date: date  # 추천날짜
+    algorithm_id: int  # 추천 알고리즘 ID
+    closing_price: float  # 당일 종가
+    change_rate: Optional[float] = None  # 전일비 (%)
+
+
+class RecStockCreate(RecStockBase):
+    """추천 종목 생성"""
+    pass
+
+
+class RecStockUpdate(BaseModel):
+    """추천 종목 수정"""
+    closing_price: Optional[float] = None  # 당일 종가
+    change_rate: Optional[float] = None  # 전일비 (%)
+
+
+class RecStock(RecStockBase):
+    """추천 종목 조회"""
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RecStockWithAlgorithm(RecStock):
+    """알고리즘 정보를 포함한 추천 종목"""
+    algorithm: Algorithm
 
     class Config:
         from_attributes = True
