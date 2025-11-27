@@ -51,7 +51,7 @@ export default function AlgorithmDetailPage() {
       setIsLoading(true)
       setError(null)
 
-      const response = await recStocksAPI.getRecStocksByAlgorithm(parseInt(algorithmId), 0, 1000)
+      const response = await recStocksAPI.getRecStocksByAlgorithm(parseInt(algorithmId), 0, 100)
       const data = response.data
 
       if (data && data.data && data.data.length > 0) {
