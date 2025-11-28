@@ -49,9 +49,9 @@ def update_rec_stocks_job():
             # RecommendationService 생성
             service = RecommendationService(app_key, secret_key, account_no)
 
-            # 신고가 돌파 조건으로 알고리즘 1 업데이트
+            # 신고가 돌파 조건으로 알고리즘 1 업데이트 (조건 ID: 7)
             success = service.search_and_update_rec_stocks(
-                condition_name='신고가 돌파',
+                condition_id='7',  # 신고가 돌파의 실제 ID
                 algorithm_id=1,
                 db=db,
                 stock_exchange_type='%'  # 전체
@@ -98,9 +98,9 @@ def update_dae_wangkaemi_stocks_job():
             # RecommendationService 생성
             service = RecommendationService(app_key, secret_key, account_no)
 
-            # 대왕개미 단타론 조건으로 알고리즘 2 업데이트
+            # 대왕개미 단타론 조건으로 알고리즘 2 업데이트 (조건 ID: 5)
             success = service.search_and_update_rec_stocks(
-                condition_name='대왕개미단타',
+                condition_id='5',  # 대왕개미단타의 실제 ID
                 algorithm_id=2,
                 db=db,
                 stock_exchange_type='%'  # 전체
@@ -148,8 +148,8 @@ def start_scheduler():
         scheduler.add_job(
             update_dae_wangkaemi_stocks_job,
             trigger=CronTrigger(
-                hour=18,
-                minute=15,
+                hour=13,
+                minute=57,
                 day_of_week='0-4',  # 월-금요일만 (토일 제외)
                 timezone='Asia/Seoul'
             ),

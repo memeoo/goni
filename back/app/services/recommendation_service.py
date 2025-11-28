@@ -68,9 +68,10 @@ class RecommendationService:
 
     def search_and_update_rec_stocks(
         self,
-        condition_name: str,
-        algorithm_id: int,
-        db: Session,
+        condition_name: str = None,
+        condition_id: str = None,
+        algorithm_id: int = None,
+        db: Session = None,
         stock_exchange_type: str = '%'  # '%': 전체, 'K': 코스피, 'Q': 코스닥
     ) -> bool:
         """
@@ -79,7 +80,8 @@ class RecommendationService:
         기존 데이터는 삭제하지 않고 누적되며, recommendation_date로 구분됩니다.
 
         Args:
-            condition_name: 조건명 (예: '신고가 돌파')
+            condition_name: 조건명 (예: '신고가 돌파') - condition_id가 없을 경우 사용
+            condition_id: 조건식 ID (직접 지정) - condition_name보다 우선
             algorithm_id: 알고리즘 ID (rec_stocks의 algorithm_id)
             db: SQLAlchemy 세션
             stock_exchange_type: 거래소 구분 (기본: '%' 전체)
@@ -96,14 +98,21 @@ class RecommendationService:
 
             logger.info(f"알고리즘 '{algorithm.name}' (ID: {algorithm_id})으로 추천 종목 업데이트 시작")
 
-            # 2. 조건명으로 조건 ID 조회
-            condition_id = self.get_condition_by_name(condition_name)
+            # 2. 조건 ID 결정 (condition_id 우선, 없으면 condition_name으로 조회)
             if not condition_id:
-                logger.error(f"조건 '{condition_name}'을(를) 찾을 수 없습니다")
-                return False
+                if not condition_name:
+                    logger.error("condition_id 또는 condition_name 중 하나는 필수입니다")
+                    return False
+                condition_id = self.get_condition_by_name(condition_name)
+                if not condition_id:
+                    logger.error(f"조건 '{condition_name}'을(를) 찾을 수 없습니다")
+                    return False
+                logger.info(f"조건명 '{condition_name}'으로 조건 ID 조회: {condition_id}")
+            else:
+                logger.info(f"조건 ID 직접 사용: {condition_id}")
 
             # 3. 조건식으로 종목 검색
-            logger.info(f"조건식 '{condition_name}' (ID: {condition_id})으로 종목 검색 중...")
+            logger.info(f"조건식 (ID: {condition_id})으로 종목 검색 중...")
             search_results = self.kiwoom_api.search_condition(
                 condition_id=condition_id,
                 search_type='0',  # 일반 조회
