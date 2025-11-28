@@ -91,7 +91,7 @@ def start_scheduler():
                 timezone='Asia/Seoul'
             ),
             id='update_rec_stocks_job',
-            name='신고가 돌파 추천 종목 업데이트',
+            name='신고가 따라잡기 추천 종목 업데이트',
             replace_existing=True
         )
 
@@ -117,7 +117,15 @@ def stop_scheduler():
 
 def get_scheduler_jobs():
     """스케줄러 작업 목록을 반환합니다 (호환성 함수)."""
-    return scheduler.get_jobs()
+    jobs = []
+    for job in scheduler.get_jobs():
+        jobs.append({
+            'id': job.id,
+            'name': job.name,
+            'trigger': str(job.trigger),
+            'next_run_time': str(job.next_run_time) if job.next_run_time else None
+        })
+    return jobs
 
 
 # 호환성 함수
