@@ -72,6 +72,55 @@ def update_rec_stocks_job():
         return False
 
 
+def update_dae_wangkaemi_stocks_job():
+    """
+    대왕개미 단타론 조건으로 추천 종목을 검색하고 업데이트합니다.
+
+    매일 18:15에 실행되며, 토요일과 일요일은 제외됩니다.
+    기존 데이터는 삭제하지 않고 누적되며, recommendation_date로 구분됩니다.
+    """
+    try:
+        logger.info(f"[스케줄러] 대왕개미 단타론 추천 종목 업데이트 작업 시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+        # 키움 API 자격증명 확인
+        app_key = os.getenv('KIWOOM_APP_KEY')
+        secret_key = os.getenv('KIWOOM_SECRET_KEY')
+        account_no = os.getenv('KIWOOM_ACCOUNT_NO')
+
+        if not app_key or not secret_key or not account_no:
+            logger.error("[스케줄러] 키움 API 자격증명이 설정되지 않았습니다")
+            return False
+
+        # 데이터베이스 세션 생성
+        db = SessionLocal()
+
+        try:
+            # RecommendationService 생성
+            service = RecommendationService(app_key, secret_key, account_no)
+
+            # 대왕개미 단타론 조건으로 알고리즘 2 업데이트
+            success = service.search_and_update_rec_stocks(
+                condition_name='대왕개미단타',
+                algorithm_id=2,
+                db=db,
+                stock_exchange_type='%'  # 전체
+            )
+
+            if success:
+                logger.info("[스케줄러] ✅ 대왕개미 단타론 추천 종목 업데이트 완료")
+                return True
+            else:
+                logger.error("[스케줄러] ❌ 대왕개미 단타론 추천 종목 업데이트 실패")
+                return False
+
+        finally:
+            db.close()
+
+    except Exception as e:
+        logger.error(f"[스케줄러] 대왕개미 단타론 추천 종목 업데이트 중 오류: {e}", exc_info=True)
+        return False
+
+
 def start_scheduler():
     """스케줄러를 시작합니다."""
     try:
@@ -95,8 +144,22 @@ def start_scheduler():
             replace_existing=True
         )
 
+        # 매일 월-금요일 18:15에 실행 (대왕개미 단타론)
+        scheduler.add_job(
+            update_dae_wangkaemi_stocks_job,
+            trigger=CronTrigger(
+                hour=18,
+                minute=15,
+                day_of_week='0-4',  # 월-금요일만 (토일 제외)
+                timezone='Asia/Seoul'
+            ),
+            id='update_dae_wangkaemi_stocks_job',
+            name='대왕개미 단타론 추천 종목 업데이트',
+            replace_existing=True
+        )
+
         scheduler.start()
-        logger.info("[스케줄러] ✅ 스케줄러 시작 (매일 18:10, 토일 제외)")
+        logger.info("[스케줄러] ✅ 스케줄러 시작 (매일 18:10, 18:15, 토일 제외)")
         logger.info("[스케줄러] 등록된 작업:")
         for job in scheduler.get_jobs():
             logger.info(f"  - ID: {job.id}, 이름: {job.name}, 트리거: {job.trigger}")
