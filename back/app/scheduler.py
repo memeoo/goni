@@ -134,8 +134,8 @@ def start_scheduler():
         scheduler.add_job(
             update_rec_stocks_job,
             trigger=CronTrigger(
-                hour=18,
-                minute=10,
+                hour=15,
+                minute=37,
                 day_of_week='0-4',  # 월-금요일만 (토일 제외)
                 timezone='Asia/Seoul'
             ),
@@ -148,8 +148,8 @@ def start_scheduler():
         scheduler.add_job(
             update_dae_wangkaemi_stocks_job,
             trigger=CronTrigger(
-                hour=13,
-                minute=57,
+                hour=14,
+                minute=22,
                 day_of_week='0-4',  # 월-금요일만 (토일 제외)
                 timezone='Asia/Seoul'
             ),
