@@ -30,7 +30,8 @@ app = FastAPI(
     title="Goni Trading API",
     description="주식 매매 계획 및 복기 일지 서비스",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    redirect_slashes=False
 )
 
 # CORS 설정

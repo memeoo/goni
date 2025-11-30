@@ -196,9 +196,9 @@ export const recStocksAPI = {
 
 export const principlesAPI = {
   getPrinciples: () =>
-    api.get('/api/principles/'),
+    api.get('/api/principles'),
   createPrinciple: (principleText: string) =>
-    api.post('/api/principles/', { principle_text: principleText }),
+    api.post('/api/principles', { principle_text: principleText }),
   deletePrinciple: (principleId: number) =>
     api.delete(`/api/principles/${principleId}`),
 }
