@@ -5,8 +5,13 @@ RSI, MACD, 볼린저 밴드 등 기술적 지표를 활용한 매매 신호 생�
 
 import pandas as pd
 import numpy as np
-import ta
 from typing import Dict, List, Any
+
+# ta 모듈이 없을 경우 대비
+try:
+    import ta
+except ImportError:
+    ta = None
 
 
 class TechnicalAnalyzer:
@@ -254,17 +259,17 @@ class TechnicalAnalyzer:
         """목표가 계산"""
         df = stock_data['historical_data'].copy()
         current_price = df['Close'].iloc[-1]
-        
+
         # 볼린저 밴드 기반 목표가
         bollinger = ta.volatility.BollingerBands(close=df['Close'], window=20, window_dev=2)
         upper_band = bollinger.bollinger_hband().iloc[-1]
         lower_band = bollinger.bollinger_lband().iloc[-1]
-        
+
         # ATR 기반 목표가
         atr = ta.volatility.AverageTrueRange(
             high=df['High'], low=df['Low'], close=df['Close'], window=14
         ).average_true_range().iloc[-1]
-        
+
         return {
             'buy_target': lower_band,
             'sell_target': upper_band,
@@ -272,3 +277,161 @@ class TechnicalAnalyzer:
             'stop_loss_short': current_price + (atr * 2),
             'risk_reward_ratio': (upper_band - current_price) / (current_price - lower_band) if current_price > lower_band else 0
         }
+
+    def calculate_atr_40days(self, stock_data: Dict[str, Any], period: int = 40, multiplier: float = 2.0) -> Dict[str, Any]:
+        """
+        40일봉 기준 ATR 계산 및 손절매 가격 설정
+
+        Args:
+            stock_data: 종목 데이터 (historical_data 포함)
+            period: ATR 계산 기간 (기본값: 40일)
+            multiplier: 손절매 배수 (기본값: 2.0)
+
+        Returns:
+            dict: ATR 관련 지표
+                {
+                    'atr_40d': ATR 값,
+                    'current_price': 현재가,
+                    'entry_price': 매입가,
+                    'stop_loss_price': 손절매 가격 (매입가 - ATR * 배수),
+                    'stop_loss_ratio': 손절률 (%),
+                    'true_ranges': TR 값들,
+                    'atr_history': ATR 추이
+                }
+        """
+        df = stock_data['historical_data'].copy()
+
+        if len(df) < period:
+            return {
+                'error': f'{period}일 이상의 데이터가 필요합니다. 현재: {len(df)}일'
+            }
+
+        # True Range 계산
+        df['TR'] = self._calculate_true_range(df)
+
+        # ATR 계산 (period일 기준 이동평균)
+        df['ATR'] = df['TR'].rolling(window=period).mean()
+
+        # 현재가 (마지막 종가)
+        current_price = df['Close'].iloc[-1]
+        current_atr = df['ATR'].iloc[-1]
+
+        # 손절매 계산
+        entry_price = current_price  # 현재가를 진입가로 가정
+        stop_loss_price = entry_price - (current_atr * multiplier)
+        stop_loss_ratio = ((entry_price - stop_loss_price) / entry_price) * 100
+
+        # ATR 추이 (최근 10일)
+        atr_history = df['ATR'].tail(10).to_dict()
+        tr_history = df['TR'].tail(10).to_dict()
+
+        return {
+            'atr_40d': current_atr,
+            'current_price': current_price,
+            'entry_price': entry_price,
+            'stop_loss_price': stop_loss_price,
+            'stop_loss_ratio': stop_loss_ratio,
+            'stop_loss_multiplier': multiplier,
+            'true_ranges_last_10': tr_history,
+            'atr_history_last_10': atr_history,
+            'statistics': {
+                'atr_min': df['ATR'].min(),
+                'atr_max': df['ATR'].max(),
+                'atr_mean': df['ATR'].mean(),
+                'atr_std': df['ATR'].std()
+            }
+        }
+
+    def _calculate_true_range(self, df: pd.DataFrame) -> pd.Series:
+        """
+        True Range (실제 변동폭) 계산
+
+        TR = max(
+            |High - Low|,
+            |High - Close_prev|,
+            |Low - Close_prev|
+        )
+        """
+        high_low = df['High'] - df['Low']
+        high_close = abs(df['High'] - df['Close'].shift())
+        low_close = abs(df['Low'] - df['Close'].shift())
+
+        tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        return tr
+
+    def calculate_atr_multiple_periods(self, stock_data: Dict[str, Any], periods: List[int] = None) -> Dict[str, Any]:
+        """
+        여러 기간별 ATR 비교 계산
+
+        Args:
+            stock_data: 종목 데이터
+            periods: ATR 계산 기간 리스트 (기본값: [14, 20, 40, 60])
+
+        Returns:
+            dict: 기간별 ATR 값
+        """
+        if periods is None:
+            periods = [14, 20, 40, 60]
+
+        df = stock_data['historical_data'].copy()
+
+        if len(df) < max(periods):
+            return {
+                'error': f'{max(periods)}일 이상의 데이터가 필요합니다. 현재: {len(df)}일'
+            }
+
+        # True Range 계산 (한 번만)
+        df['TR'] = self._calculate_true_range(df)
+
+        current_price = df['Close'].iloc[-1]
+        result = {
+            'current_price': current_price,
+            'atr_by_period': {},
+            'volatility_ratio': {}
+        }
+
+        # 각 기간별 ATR 계산
+        for period in periods:
+            atr_value = df['TR'].rolling(window=period).mean().iloc[-1]
+            volatility = (atr_value / current_price) * 100  # 변동성 비율 (%)
+
+            result['atr_by_period'][f'atr_{period}d'] = atr_value
+            result['volatility_ratio'][f'volatility_{period}d'] = volatility
+
+        return result
+
+    def calculate_stop_loss_levels(self,
+                                  entry_price: float,
+                                  atr_value: float,
+                                  multipliers: List[float] = None) -> Dict[str, float]:
+        """
+        다양한 배수의 손절매 가격 계산
+
+        Args:
+            entry_price: 진입가
+            atr_value: ATR 값
+            multipliers: 손절매 배수 리스트 (기본값: [1.0, 1.5, 2.0, 2.5, 3.0])
+
+        Returns:
+            dict: 배수별 손절매 가격 및 손절률
+        """
+        if multipliers is None:
+            multipliers = [1.0, 1.5, 2.0, 2.5, 3.0]
+
+        result = {
+            'entry_price': entry_price,
+            'atr': atr_value,
+            'stop_loss_levels': {}
+        }
+
+        for multiplier in multipliers:
+            stop_loss_price = entry_price - (atr_value * multiplier)
+            stop_loss_ratio = ((entry_price - stop_loss_price) / entry_price) * 100
+
+            result['stop_loss_levels'][f'multiplier_{multiplier}x'] = {
+                'stop_loss_price': stop_loss_price,
+                'stop_loss_ratio': stop_loss_ratio,
+                'risk_amount': atr_value * multiplier
+            }
+
+        return result

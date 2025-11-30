@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { TrendingUp, Plus, RefreshCw, Settings, LogOut, User, Menu, X, ArrowRight } from 'lucide-react'
+import { TrendingUp, Plus, RefreshCw, Settings, LogOut, User, Menu, X, ArrowRight, Lightbulb } from 'lucide-react'
 import { clearAuthToken } from '@/lib/api'
 import { useRouter, usePathname } from 'next/navigation'
 
@@ -11,6 +11,7 @@ interface HeaderProps {
   onRefresh: () => void
   onAddStock: () => void
   onStrategyManage: () => void
+  onPrincipleManage: () => void
   isRefreshing?: boolean
 }
 
@@ -20,6 +21,7 @@ export default function Header({
   onRefresh,
   onAddStock,
   onStrategyManage,
+  onPrincipleManage,
   isRefreshing = false
 }: HeaderProps) {
   const router = useRouter()
@@ -119,6 +121,15 @@ export default function Header({
             >
               {isRecommendationPage ? <Settings className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
               <span className="hidden lg:inline">{strategyButtonLabel}</span>
+            </button>
+
+            <button
+              onClick={onPrincipleManage}
+              className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1 hidden sm:flex text-sm"
+              title="원칙"
+            >
+              <Lightbulb className="h-4 w-4" />
+              <span className="hidden lg:inline">원칙</span>
             </button>
 
             <button

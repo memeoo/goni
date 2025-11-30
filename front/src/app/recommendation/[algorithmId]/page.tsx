@@ -151,6 +151,7 @@ export default function AlgorithmDetailPage() {
         onRefresh={handleRefresh}
         onAddStock={handleAddStock}
         onStrategyManage={handleStrategyManage}
+        onPrincipleManage={() => {}}
         isRefreshing={false}
       />
 

@@ -587,23 +587,17 @@ export default function TradingPlanFormModal({
       <div className="bg-white rounded-lg w-full h-[95vh] sm:h-auto sm:max-w-7xl sm:max-h-[90vh] flex flex-col shadow-xl">
         {/* Header */}
         <div className="flex justify-between items-center p-3 sm:p-6 border-b">
-          <div className="flex-1">
+          <div className="flex-1 min-h-[52px] flex flex-col justify-center">
             <h2 className="text-lg sm:text-xl font-bold text-gray-900">{stockName}</h2>
-            {hoveredChartData ? (
-              <div className="mt-1 text-xs sm:text-sm text-gray-600 space-y-0.5">
-                <div>
-                  시간: {hoveredChartData.date}
+            <div className="h-5 sm:h-6">
+              {hoveredChartData ? (
+                <div className="text-xs sm:text-sm text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">
+                  {hoveredChartData.date} | 시가: {hoveredChartData.open?.toLocaleString()}원 | 고가: {hoveredChartData.high?.toLocaleString()}원 | 저가: {hoveredChartData.low?.toLocaleString()}원 | 종가: {hoveredChartData.close?.toLocaleString()}원 | 거래량: {hoveredChartData.volume?.toLocaleString()}주
                 </div>
-                <div>
-                  시가: {hoveredChartData.open?.toLocaleString()}원 | 고가: {hoveredChartData.high?.toLocaleString()}원 | 저가: {hoveredChartData.low?.toLocaleString()}원 | 종가: {hoveredChartData.close?.toLocaleString()}원
-                </div>
-                <div>
-                  거래량: {hoveredChartData.volume?.toLocaleString()}주
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs sm:text-sm text-gray-500">{stockCode}</p>
-            )}
+              ) : (
+                <p className="text-xs sm:text-sm text-gray-500">{stockCode}</p>
+              )}
+            </div>
           </div>
           <button
             onClick={onClose}

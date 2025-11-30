@@ -106,6 +106,190 @@ python main.py
 
 ## ADDED or MODIFIED
 
+### 2025-11-30: ATR(Average True Range) 기술적 분석 함수 추가, 손절/익절 자동 계산 UI 추가 및 Kiwoom API 개선
+
+#### 신기능 1: 40일 기준 ATR 계산 및 손절매 설정 도구
+
+**목적**: 기술적 분석을 위한 ATR(변동성 지표) 계산 함수 추가 및 손절매 가격 자동 계산
+
+#### 신기능 2: 매매 계획 폼에 ATR 기반 손절/익절 자동 계산
+
+**목적**: 사용자가 간단하게 ATR 배수를 입력하여 손절매 및 익절가를 자동으로 계산하는 기능
+
+**구현 내용**:
+
+1. **ATR 계산 함수 추가** (`analyze/src/technical_analyzer.py`):
+   - `calculate_atr_40days()` (라인 276-338):
+     - 40일 기준 ATR 계산
+     - 손절매 가격 자동 계산 (배수 설정 가능, 기본값 2.0배)
+     - ATR 통계 제공 (최소, 최대, 평균, 표준편차)
+     - 반환: 현재가, ATR값, 손절매 가격, 손절률, 통계 정보
+
+   - `_calculate_true_range()` (라인 340-355):
+     - True Range(실제 변동폭) 계산
+     - 공식: max(|High-Low|, |High-Close_prev|, |Low-Close_prev|)
+
+   - `calculate_atr_multiple_periods()` (라인 357-396):
+     - 여러 기간(기본: 14, 20, 40, 60일)의 ATR 비교
+     - 각 기간별 변동성 비율(%) 계산
+
+   - `calculate_stop_loss_levels()` (라인 398-432):
+     - 다양한 배수(기본: 1.0, 1.5, 2.0, 2.5, 3.0배)의 손절매 가격 계산
+     - 배수별 손절률, 리스크 금액 제공
+
+2. **테스트 스위트 생성** (`analyze/test_atr.py`):
+   - `test_calculate_atr_40days()`: 40일 ATR 계산 테스트
+   - `test_multiple_periods()`: 다중 기간별 ATR 비교 테스트
+   - `test_stop_loss_levels()`: 손절매 가격 계산 테스트
+   - `test_practical_example()`: 실전 매매 시나리오 (신고가 돌파 시뮬레이션)
+   - ✅ **테스트 완료**: 모든 테스트 성공
+
+3. **테스트 결과**:
+   ```
+   40일 ATR 계산: ✅ 성공
+   - 현재가: 8,979원
+   - 40일 ATR: 283.26원
+   - 손절매(2배): 8,413원 (손절률: 6.31%)
+
+   다중 기간 비교: ✅ 성공
+   - 14일 ATR: 246.00원 (변동성: 2.74%)
+   - 20일 ATR: 277.10원 (변동성: 3.09%)
+   - 40일 ATR: 283.26원 (변동성: 3.15%)
+   - 60일 ATR: 274.72원 (변동성: 3.06%)
+
+   배수별 손절매: ✅ 성공
+   - 1.0배: 8,696원 (손절률: 3.15%)
+   - 1.5배: 8,554원 (손절률: 4.73%)
+   - 2.0배: 8,413원 (손절률: 6.31%)
+   - 2.5배: 8,271원 (손절률: 7.89%)
+   - 3.0배: 8,129원 (손절률: 9.46%)
+   ```
+
+**Kiwoom API 개선사항**:
+
+1. **조건식 검색 개선** (`analyze/lib/kiwoom.py`):
+   - 응답 큐 구조 변경: `response_queue` 딕셔너리로 조건식별 응답 관리 (라인 31)
+   - PING 응답 분리 처리: 주기적 연결 유지용 PING을 응답으로 저장하지 않음 (라인 78-80)
+   - 다중 검색 모드 지원:
+     - `search_type='0'`: 일반 조회 (stex_tp, cont_yn, next_key 포함)
+     - `search_type='1'`: 실시간 조회 (stex_tp 제외)
+   - 타임아웃 증가: 15초 → 30초 (응답 대기 시간 개선)
+   - 향상된 에러 로깅: exc_info=True로 상세한 스택 트레이스 기록
+
+**사용 예시**:
+
+```python
+from analyze.src.technical_analyzer import TechnicalAnalyzer
+
+analyzer = TechnicalAnalyzer()
+
+# 40일 ATR 계산
+result = analyzer.calculate_atr_40days(stock_data, period=40, multiplier=2.0)
+print(f"손절매 가격: {result['stop_loss_price']:,.0f}원")
+print(f"손절률: {result['stop_loss_ratio']:.2f}%")
+
+# 다중 기간 비교
+result = analyzer.calculate_atr_multiple_periods(stock_data, periods=[14, 20, 40, 60])
+
+# 다양한 배수 손절매
+result = analyzer.calculate_stop_loss_levels(current_price=10000, atr_value=300,
+                                              multipliers=[1.0, 1.5, 2.0, 2.5, 3.0])
+```
+
+**향후 활용**:
+- 신고가 돌파 매매 시 ATR 기반 손절매 설정
+- 대왕개미 단타론에 변동성 분석 추가
+- 포지션 크기 결정 시 변동성 반영
+- 위험 관리 개선
+
+4. **프론트엔드 ATR 기반 자동 계산 UI** (`front/src/components/trading-plan-form-modal.tsx`):
+
+   **추가된 상태 변수**:
+   - `atrValue`: 계산된 40일 ATR 값
+   - `atrLoading`: ATR 계산 중 로딩 상태
+   - `profitAtrMultiplier`: 익절 ATR 배수 입력값 (예: 1.5)
+   - `lossAtrMultiplier`: 손절 ATR 배수 입력값 (예: 2.0)
+
+   **추가된 함수**:
+   - `calculateATR()`: 백엔드 API 호출로 40일 ATR 계산
+     ```
+     GET /api/stocks/{stock_code}/atr
+     ```
+   - `calculateProfitByAtr()`: ATR 배수로 익절가 자동 계산
+     - 공식: 익절가 = 매수가 + ATR × 배수
+     - 익절률 = (익절가 - 매수가) / 매수가 × 100
+   - `calculateLossByAtr()`: ATR 배수로 손절가 자동 계산
+     - 공식: 손절가 = 매수가 - ATR × 배수
+     - 손절률 = (손절가 - 매수가) / 매수가 × 100
+
+   **UI 섹션**:
+
+   **익절 계획 (ATR 기반)**:
+   ```
+   ┌─────────────────────────────────────────┐
+   │ ATR 기반 익절 설정                      │
+   │ [ATR 계산] ← 40일 ATR: 283원            │
+   │ 배수(배): [1.5] [익절가 계산하기]       │
+   └─────────────────────────────────────────┘
+   ```
+
+   **손절 계획 (ATR 기반)**:
+   ```
+   ┌─────────────────────────────────────────┐
+   │ ATR 기반 손절 설정                      │
+   │ ← 40일 ATR: 283원                       │
+   │ 배수(배): [2.0] [손절가 계산하기]       │
+   └─────────────────────────────────────────┘
+   ```
+
+   **사용 흐름**:
+   1. 매수 계획 폼에서 매수가 입력
+   2. 익절 계획 섹션의 "ATR 계산" 버튼 클릭
+   3. 40일 ATR 자동 계산 및 표시 (예: 283원)
+   4. 익절 배수 입력 (예: 1.5)
+   5. "익절가 계산하기" 버튼 클릭
+   6. 익절가 및 익절률 자동 계산 및 입력
+   7. 손절도 동일 방식으로 진행
+
+   **계산 예시**:
+   ```
+   매수가: 10,000원
+   40일 ATR: 300원
+
+   익절 (1.5배):
+   - 익절가 = 10,000 + 300×1.5 = 10,450원
+   - 익절률 = (10,450-10,000)/10,000×100 = 4.50%
+
+   손절 (2.0배):
+   - 손절가 = 10,000 - 300×2.0 = 9,400원
+   - 손절률 = (9,400-10,000)/10,000×100 = -6.00%
+   ```
+
+5. **백엔드 ATR API 엔드포인트** (`back/app/routers/stocks.py` 라인 664-730):
+   - 요청: `GET /api/stocks/{stock_code}/atr`
+   - 응답:
+     ```json
+     {
+       "status": "success",
+       "data": {
+         "atr_40d": 283.26,
+         "current_price": 8979,
+         "entry_price": 8979,
+         "stop_loss_price": 8413,
+         "stop_loss_ratio": 6.31,
+         "stop_loss_multiplier": 2.0,
+         "statistics": {
+           "atr_min": 263.09,
+           "atr_max": 335.78,
+           "atr_mean": 287.24,
+           "atr_std": 18.92
+         }
+       }
+     }
+     ```
+
+---
+
 ### 2025-11-28: 대왕개미 단타론 추천 종목 스케줄러 추가
 
 #### 신기능: 매일 18:15에 "대왕개미 단타론" 조건으로 자동 종목 추천 (토일 제외)

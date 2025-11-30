@@ -88,6 +88,7 @@ export default function RecommendationPage() {
         onRefresh={handleRefresh}
         onAddStock={handleAddStock}
         onStrategyManage={handleStrategyManage}
+        onPrincipleManage={() => {}}
         isRefreshing={false}
       />
 

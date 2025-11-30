@@ -193,3 +193,12 @@ export const recStocksAPI = {
   deleteRecStock: (recStockId: number) =>
     api.delete(`/api/rec-stocks/${recStockId}`),
 }
+
+export const principlesAPI = {
+  getPrinciples: () =>
+    api.get('/api/principles/'),
+  createPrinciple: (principleText: string) =>
+    api.post('/api/principles/', { principle_text: principleText }),
+  deletePrinciple: (principleId: number) =>
+    api.delete(`/api/principles/${principleId}`),
+}

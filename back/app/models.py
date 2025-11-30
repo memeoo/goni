@@ -228,3 +228,17 @@ class RecStock(Base):
     updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     algorithm = relationship("Algorithm", back_populates="rec_stocks")
+
+
+class Principle(Base):
+    __tablename__ = "principles"
+
+    id = sa.Column(sa.Integer, primary_key=True, index=True)
+    user_id = sa.Column(sa.Integer, sa.ForeignKey("users.id"), nullable=False, index=True)
+    principle_text = sa.Column(sa.Text, nullable=False)
+
+    # 시스템 정보
+    created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
+    updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User")

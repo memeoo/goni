@@ -10,6 +10,7 @@ import RecapModal from '@/components/recap-modal'
 import StockSearchModal from '@/components/stock-search-modal'
 import RecapStockAddModal from '@/components/recap-stock-add-modal'
 import TradingPlanFormModal from '@/components/trading-plan-form-modal'
+import PrinciplesModal from '@/components/principles-modal'
 
 // 계획 모드 종목 조회 함수 (trading_plans 테이블에서 조회)
 const fetchPlanModeStocks = async () => {
@@ -64,6 +65,7 @@ export default function DashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false)
   const [isPlanFormModalOpen, setIsPlanFormModalOpen] = useState(false)
+  const [isPrinciplesModalOpen, setIsPrinciplesModalOpen] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedTradingPlanId, setSelectedTradingPlanId] = useState<number | null>(null)
   const [selectedTradingId, setSelectedTradingId] = useState<number | null>(null)
@@ -272,6 +274,7 @@ export default function DashboardPage() {
         onRefresh={handleRefresh}
         onAddStock={handleAddStock}
         onStrategyManage={handleStrategyManage}
+        onPrincipleManage={() => setIsPrinciplesModalOpen(true)}
         isRefreshing={isRefreshing}
       />
 
@@ -346,6 +349,12 @@ export default function DashboardPage() {
           stockName={planFormStockName}
         />
       )}
+
+      {/* Principles Modal */}
+      <PrinciplesModal
+        isOpen={isPrinciplesModalOpen}
+        onClose={() => setIsPrinciplesModalOpen(false)}
+      />
     </div>
   )
 }

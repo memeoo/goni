@@ -5,7 +5,7 @@ import uvicorn
 import logging
 
 from app.database import database
-from app.routers import auth, stocks, trading_plans, recap, trading, trading_stocks, stocks_info, rec_stocks, algorithm
+from app.routers import auth, stocks, trading_plans, recap, trading, trading_stocks, stocks_info, rec_stocks, algorithm, principles
 from app.scheduler import start_scheduler, stop_scheduler, get_scheduler_jobs, scheduler, sync_stocks_info_job
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,7 @@ app.include_router(trading_stocks.router, tags=["trading-stocks"])  # trading_st
 app.include_router(rec_stocks.router, tags=["rec-stocks"])  # /api/rec-stocks 포함
 app.include_router(algorithm.router, tags=["algorithm"])  # /api/algorithms 포함
 app.include_router(recap.router)
+app.include_router(principles.router, prefix="/api/principles", tags=["principles"])
 
 
 @app.get("/")
