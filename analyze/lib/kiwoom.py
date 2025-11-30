@@ -28,6 +28,7 @@ class KiwoomWebSocketClient:
         self.connected = False
         self.keep_running = True
         self.response_data = None
+        self.response_queue = {}  # 응답을 조건식 ID별로 저장
 
     async def connect(self):
         """WebSocket 서버에 연결합니다."""
@@ -71,30 +72,49 @@ class KiwoomWebSocketClient:
                 response = json.loads(await self.websocket.recv())
                 logger.debug(f'WebSocket 응답 수신: {response}')
 
+                trnm = response.get('trnm')
+
                 # 로그인 응답 처리
-                if response.get('trnm') == 'LOGIN':
+                if trnm == 'LOGIN':
                     if response.get('return_code') != 0:
                         logger.error(f'로그인 실패: {response.get("return_msg")}')
                         await self.disconnect()
                         return False
                     else:
                         logger.info('로그인 성공')
+                    # response_data에 저장
+                    self.response_data = response
 
                 # PING 응답 처리 (PING을 받으면 그대로 다시 보내기)
-                elif response.get('trnm') == 'PING':
+                elif trnm == 'PING':
+                    logger.debug('PING 응답 수신 및 재전송')
                     await self.send_message(response)
+                    # PING은 response_data에 저장하지 않음
 
-                # 응답 데이터 저장
-                self.response_data = response
+                # 조건식 목록 조회 응답
+                elif trnm == 'CNSRLST':
+                    logger.info(f'조건식 목록 응답 수신: {len(response.get("data", []))}개')
+                    self.response_data = response
 
-                # PING이 아닌 경우만 로깅
-                if response.get('trnm') != 'PING':
-                    # 응답 유형별 로깅
-                    trnm = response.get('trnm')
-                    if trnm in ['CNSRLST', 'CNSRREQ']:
-                        logger.info(f'WebSocket 응답 [CNSRREQ/CNSRLST]: {response}')
-                    else:
-                        logger.info(f'WebSocket 응답 [{trnm}]: {response}')
+                # 조건식 검색 응답 (일반 조회 또는 실시간 조회)
+                elif trnm == 'CNSRREQ':
+                    seq = response.get('seq')  # 조건식 ID
+                    logger.info(f'조건식 {seq} 검색 응답 수신: {len(response.get("data", []))}개 종목')
+                    # 응답을 조건식 ID별로 저장
+                    if seq:
+                        self.response_queue[seq] = response
+                    # 동시에 response_data에도 저장 (하위 호환성)
+                    self.response_data = response
+
+                # 조건식 실시간 해제 응답
+                elif trnm == 'CNSRCLR':
+                    logger.info(f'조건식 실시간 해제 응답: {response}')
+                    self.response_data = response
+
+                # 기타 응답
+                else:
+                    logger.info(f'WebSocket 응답 [{trnm}]: {response}')
+                    self.response_data = response
 
             except websockets.ConnectionClosed:
                 logger.error('WebSocket 연결이 서버에 의해 종료됨')
@@ -181,10 +201,13 @@ class KiwoomWebSocketClient:
 
         Args:
             condition_id: 조건식 ID (조건 검색 목록에서 조회한 ID)
-            search_type: 조회 타입 ('0': 일반, '1': 실시간 등)
+            search_type: 조회 타입
+                - '0': 일반 조회 (ka10172)
+                - '1': 실시간 조회 (ka10173)
             stock_exchange_type: 거래소 구분 ('K': 코스피, 'Q': 코스닥, '%': 전체)
-            cont_yn: 연속조회여부 ('N': 아니오, 'Y': 예)
-            next_key: 연속조회키 (연속조회시 사용)
+                - 실시간 조회('1')에서는 사용되지 않음
+            cont_yn: 연속조회여부 ('N': 아니오, 'Y': 예) - 일반 조회에서만 사용
+            next_key: 연속조회키 (연속조회시 사용) - 일반 조회에서만 사용
 
         Returns:
             dict: 조건 검색 결과
@@ -215,26 +238,42 @@ class KiwoomWebSocketClient:
             receive_task = asyncio.create_task(self.receive_messages())
 
             # 로그인 응답 대기
-            await asyncio.sleep(2)
+            await asyncio.sleep(1)
 
-            # 조건 검색 요청
-            request_param = {
-                'trnm': 'CNSRREQ',
-                'seq': condition_id,  # 조건식 일련번호
-                'search_type': search_type,  # 조회 타입
-                'stex_tp': stock_exchange_type,  # 거래소 구분
-                'cont_yn': cont_yn,  # 연속조회여부
-                'next_key': next_key  # 연속조회키
-            }
+            # 응답 큐 초기화 (해당 조건식 ID의 응답 제거)
+            if condition_id in self.response_queue:
+                del self.response_queue[condition_id]
 
-            logger.info(f"조건 검색 요청 시작: condition_id={condition_id}, search_type={search_type}, stex_tp={stock_exchange_type}")
+            # 조건 검색 요청 구성 (search_type에 따라 다름)
+            if search_type == '1':
+                # 실시간 조회 (ka10173): stex_tp 없음
+                request_param = {
+                    'trnm': 'CNSRREQ',
+                    'seq': condition_id,
+                    'search_type': '1',  # 실시간 조회
+                }
+                logger.info(f"조건 검색 요청 시작 (실시간): condition_id={condition_id}")
+            else:
+                # 일반 조회 (ka10172): stex_tp, cont_yn, next_key 포함
+                request_param = {
+                    'trnm': 'CNSRREQ',
+                    'seq': condition_id,
+                    'search_type': '0',  # 일반 조회
+                    'stex_tp': stock_exchange_type,
+                    'cont_yn': cont_yn,
+                    'next_key': next_key
+                }
+                logger.info(f"조건 검색 요청 시작 (일반): condition_id={condition_id}, stex_tp={stock_exchange_type}")
+
             await self.send_message(request_param)
 
-            # 응답 대기 (최대 15초)
-            for _ in range(150):  # 15초간 대기
-                if self.response_data and self.response_data.get('trnm') == 'CNSRREQ':
-                    response = self.response_data
-                    self.response_data = None  # 응답 초기화
+            # 응답 대기 (최대 30초로 증가)
+            max_wait = 300 if search_type == '1' else 200  # 실시간은 30초, 일반은 20초
+            for _ in range(max_wait):
+                # 응답 큐에서 조건식별 응답 확인
+                if condition_id in self.response_queue:
+                    response = self.response_queue[condition_id]
+                    del self.response_queue[condition_id]
 
                     # 응답 검증
                     if response.get('return_code') != 0:
@@ -242,17 +281,17 @@ class KiwoomWebSocketClient:
                         return None
 
                     data = response.get('data', [])
-                    logger.info(f"조건 검색 결과: 총 {len(data)}개 종목, 연속조회={response.get('cont_yn')}")
+                    logger.info(f"조건 검색 결과: 조건식 {condition_id}, 총 {len(data)}개 종목")
 
                     return response
 
                 await asyncio.sleep(0.1)
 
-            logger.error("조건 검색 요청 타임아웃")
+            logger.error(f"조건 검색 요청 타임아웃: condition_id={condition_id}")
             return None
 
         except Exception as e:
-            logger.error(f"조건 검색 요청 실패: {e}")
+            logger.error(f"조건 검색 요청 실패: {e}", exc_info=True)
             return None
         finally:
             await self.disconnect()
