@@ -87,6 +87,9 @@ export default function TradingPlanFormModal({
   const [profitAtrMultiplier, setProfitAtrMultiplier] = useState('')
   const [lossAtrMultiplier, setLossAtrMultiplier] = useState('')
 
+  // 차트 호버 정보
+  const [hoveredChartData, setHoveredChartData] = useState<ChartDataPoint | null>(null)
+
   // 이 종목의 계획 목록
   const [plansList, setPlansList] = useState<TradingPlan[]>([])
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
@@ -568,6 +571,15 @@ export default function TradingPlanFormModal({
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
   }
 
+  // 차트 호버 인덱스 변경 핸들러
+  const handleChartHoverChange = (index: number | null) => {
+    if (index !== null && chartData && chartData[index]) {
+      setHoveredChartData(chartData[index])
+    } else {
+      setHoveredChartData(null)
+    }
+  }
+
   if (!isOpen) return null
 
   return (
@@ -575,9 +587,23 @@ export default function TradingPlanFormModal({
       <div className="bg-white rounded-lg w-full h-[95vh] sm:h-auto sm:max-w-7xl sm:max-h-[90vh] flex flex-col shadow-xl">
         {/* Header */}
         <div className="flex justify-between items-center p-3 sm:p-6 border-b">
-          <div>
+          <div className="flex-1">
             <h2 className="text-lg sm:text-xl font-bold text-gray-900">{stockName}</h2>
-            <p className="text-xs sm:text-sm text-gray-500">{stockCode}</p>
+            {hoveredChartData ? (
+              <div className="mt-1 text-xs sm:text-sm text-gray-600 space-y-0.5">
+                <div>
+                  시간: {hoveredChartData.date}
+                </div>
+                <div>
+                  시가: {hoveredChartData.open?.toLocaleString()}원 | 고가: {hoveredChartData.high?.toLocaleString()}원 | 저가: {hoveredChartData.low?.toLocaleString()}원 | 종가: {hoveredChartData.close?.toLocaleString()}원
+                </div>
+                <div>
+                  거래량: {hoveredChartData.volume?.toLocaleString()}주
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs sm:text-sm text-gray-500">{stockCode}</p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -611,6 +637,7 @@ export default function TradingPlanFormModal({
                     data={chartData}
                     trades={tradesData}
                     avgPrice={null}
+                    onHoveredIndexChange={handleChartHoverChange}
                   />
                 )}
               </div>
