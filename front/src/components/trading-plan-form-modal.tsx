@@ -226,6 +226,39 @@ export default function TradingPlanFormModal({
     console.log('⚠️ calculateATR 호출됨 (레거시) - 자동 계산 함수 사용')
   }
 
+  // 주식 호가 단위로 가격 절삭하기
+  const roundToTickUnit = (price: number): number => {
+    // 호가 단위 기준:
+    // 2천원 미만: 1원, 2천~5천원: 5원, 5천~1만원: 10원, 1만원~2만원: 10원
+    // 2만원~5만원: 50원, 5만원~10만원: 100원, 10만원~20만원: 100원
+    // 20만원~50만원: 500원, 50만원 이상: 1,000원
+
+    let tickUnit = 1
+
+    if (price < 2000) {
+      tickUnit = 1
+    } else if (price < 5000) {
+      tickUnit = 5
+    } else if (price < 10000) {
+      tickUnit = 10
+    } else if (price < 20000) {
+      tickUnit = 10
+    } else if (price < 50000) {
+      tickUnit = 50
+    } else if (price < 100000) {
+      tickUnit = 100
+    } else if (price < 200000) {
+      tickUnit = 100
+    } else if (price < 500000) {
+      tickUnit = 500
+    } else {
+      tickUnit = 1000
+    }
+
+    // 내려서 절삭 (버림)
+    return Math.floor(price / tickUnit) * tickUnit
+  }
+
   // ATR 배수로 익절가 계산
   const calculateProfitByAtr = () => {
     // 입력값 검증
@@ -247,13 +280,14 @@ export default function TradingPlanFormModal({
       return
     }
 
-    const targetPrice = buyPriceNum + atrValue * profitMultiplier
+    const rawTargetPrice = buyPriceNum + atrValue * profitMultiplier
+    const targetPrice = roundToTickUnit(rawTargetPrice)
     const profitRatio = ((targetPrice - buyPriceNum) / buyPriceNum) * 100
 
     setProfitTarget(targetPrice.toFixed(0))
     setProfitRate(profitRatio.toFixed(2))
     setProfitCondition(`ATR ${profitMultiplier}배 (${atrValue.toFixed(0)}원 × ${profitMultiplier})`)
-    console.log(`✅ 익절가 계산: ${targetPrice.toFixed(0)}원 (${profitRatio.toFixed(2)}%)`)
+    console.log(`✅ 익절가 계산: ${targetPrice.toFixed(0)}원 (${profitRatio.toFixed(2)}%) [호가 절삭: ${rawTargetPrice.toFixed(0)}원 → ${targetPrice.toFixed(0)}원]`)
   }
 
   // ATR 배수로 손절가 계산
@@ -277,13 +311,14 @@ export default function TradingPlanFormModal({
       return
     }
 
-    const targetPrice = buyPriceNum - atrValue * lossMultiplier
+    const rawTargetPrice = buyPriceNum - atrValue * lossMultiplier
+    const targetPrice = roundToTickUnit(rawTargetPrice)
     const lossRatio = ((targetPrice - buyPriceNum) / buyPriceNum) * 100
 
     setLossTarget(targetPrice.toFixed(0))
     setLossRate(lossRatio.toFixed(2))
     setLossCondition(`ATR ${lossMultiplier}배 손절 (${atrValue.toFixed(0)}원 × ${lossMultiplier})`)
-    console.log(`✅ 손절가 계산: ${targetPrice.toFixed(0)}원 (${lossRatio.toFixed(2)}%)`)
+    console.log(`✅ 손절가 계산: ${targetPrice.toFixed(0)}원 (${lossRatio.toFixed(2)}%) [호가 절삭: ${rawTargetPrice.toFixed(0)}원 → ${targetPrice.toFixed(0)}원]`)
   }
 
   // 입력 필드 초기화
