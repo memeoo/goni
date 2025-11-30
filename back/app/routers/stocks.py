@@ -659,3 +659,151 @@ async def get_stock_foreign_institutional_data(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"외국인·기관 순매매 데이터 조회 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.get("/{stock_code}/atr")
+async def get_atr(stock_code: str):
+    """
+    40일 기준 ATR(Average True Range) 계산
+
+    Args:
+        stock_code (str): 종목코드 (6자리)
+
+    Returns:
+        Dict: ATR 계산 결과
+        {
+            'data': {
+                'atr_40d': 283.26,
+                'current_price': 8979,
+                'entry_price': 8979,
+                'stop_loss_price': 8413,
+                'stop_loss_ratio': 6.31,
+                'statistics': {...}
+            }
+        }
+    """
+    try:
+        # 키움증권 API를 사용하여 OHLC 데이터 조회
+        print(f"📊 ATR 계산 시작: {stock_code}")
+
+        try:
+            from lib.kiwoom import KiwoomAPI
+            import os
+            from dotenv import load_dotenv
+            from datetime import datetime
+
+            # .env 파일에서 키움 API 설정 로드
+            analyze_env_path = os.path.join(os.path.dirname(__file__), '../../../analyze/.env')
+            load_dotenv(analyze_env_path)
+
+            api = KiwoomAPI(
+                app_key=os.getenv('KIWOOM_APP_KEY'),
+                secret_key=os.getenv('KIWOOM_SECRET_KEY'),
+                account_no=os.getenv('KIWOOM_ACCOUNT_NO'),
+                use_mock=False
+            )
+
+            print(f"🔑 키움 API 초기화 완료")
+
+            # 키움 API에서 일봉 차트 데이터 조회 (오늘 날짜 기준)
+            today_dt = datetime.now().strftime('%Y%m%d')
+            chart_result = api.get_daily_chart(stock_code, base_dt=today_dt)
+
+            # 응답 검증
+            if not chart_result:
+                raise Exception("키움 API에서 응답을 받을 수 없습니다")
+
+            # stk_dt_pole_chart_qry에서 데이터 추출
+            chart_data = chart_result.get('stk_dt_pole_chart_qry', [])
+
+            if not isinstance(chart_data, list) or len(chart_data) == 0:
+                raise Exception(f"키움 API에서 차트 데이터를 받을 수 없습니다: {chart_result.get('return_msg', 'Unknown error')}")
+
+            print(f"📈 키움 API 차트 데이터 조회 완료: {len(chart_data)}개 데이터")
+
+            # chart_data를 DataFrame으로 변환
+            ohlc_data = pd.DataFrame(chart_data)
+            print(f"✅ DataFrame으로 변환: {len(ohlc_data)}개 행")
+
+            # 키움 API의 컬럼명을 표준 형식으로 정규화
+            column_mapping = {
+                'open_pric': 'Open',
+                'high_pric': 'High',
+                'low_pric': 'Low',
+                'cur_prc': 'Close',
+                'trde_qty': 'Volume'
+            }
+            ohlc_data = ohlc_data.rename(columns=column_mapping)
+            print(f"✅ 컬럼명 정규화 완료: {list(ohlc_data.columns)}")
+
+            # 숫자로 변환 (문자열일 수 있으므로)
+            numeric_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+            for col in numeric_columns:
+                if col in ohlc_data.columns:
+                    ohlc_data[col] = pd.to_numeric(ohlc_data[col], errors='coerce')
+            print(f"✅ 숫자형 변환 완료")
+
+        except Exception as kiwoom_error:
+            print(f"❌ 키움 API 조회 실패: {kiwoom_error}")
+            raise HTTPException(status_code=500, detail=f"키움 API에서 데이터를 조회할 수 없습니다: {str(kiwoom_error)}")
+
+        # ohlc_data가 DataFrame인지 리스트인지 확인
+        if isinstance(ohlc_data, pd.DataFrame):
+            df = ohlc_data
+            print(f"✅ DataFrame 입력됨: {len(df)}개 행")
+        else:
+            # 리스트인 경우
+            if not ohlc_data or len(ohlc_data) == 0:
+                raise HTTPException(status_code=400, detail=f"종목 {stock_code}의 차트 데이터를 조회할 수 없습니다.")
+            df = pd.DataFrame(ohlc_data)
+            print(f"✅ DataFrame 생성됨: {len(df)}개 행")
+
+        if len(df) == 0:
+            raise HTTPException(status_code=400, detail=f"종목 {stock_code}의 차트 데이터가 비어있습니다.")
+
+        # TechnicalAnalyzer를 사용하여 ATR 계산
+        from src.technical_analyzer import TechnicalAnalyzer
+
+        analyzer = TechnicalAnalyzer()
+        stock_data = {
+            'symbol': stock_code,
+            'historical_data': df
+        }
+
+        print(f"📊 ATR 계산 중... (데이터: {len(df)}개)")
+
+        # ATR 40일 계산
+        result = analyzer.calculate_atr_40days(stock_data, period=40, multiplier=2.0)
+
+        if 'error' in result:
+            print(f"❌ ATR 계산 오류: {result['error']}")
+            raise HTTPException(status_code=400, detail=f"ATR 계산 실패: {result['error']}")
+
+        print(f"✅ ATR 계산 완료: {stock_code}")
+        print(f"   40일 ATR: {result['atr_40d']:.2f}원")
+        print(f"   현재가: {result['current_price']:.0f}원")
+        print(f"   손절가: {result['stop_loss_price']:.0f}원")
+
+        # numpy 타입을 Python 네이티브 타입으로 변환
+        serializable_result = {}
+        for key, value in result.items():
+            if hasattr(value, 'item'):  # numpy 타입 체크
+                serializable_result[key] = value.item()
+            elif isinstance(value, dict):
+                # 딕셔너리 내의 numpy 타입도 변환
+                serializable_result[key] = {k: v.item() if hasattr(v, 'item') else v for k, v in value.items()}
+            else:
+                serializable_result[key] = value
+
+        return {
+            'status': 'success',
+            'data': serializable_result
+        }
+
+    except HTTPException:
+        raise  # HTTPException은 그대로 전달
+    except Exception as e:
+        print(f"❌ ATR 계산 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"ATR 계산 중 오류가 발생했습니다: {str(e)}")
