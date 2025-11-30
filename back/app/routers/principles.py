@@ -24,7 +24,7 @@ class PrincipleResponse(BaseModel):
         from_attributes = True
 
 
-@router.get("/", response_model=dict)
+@router.get("", response_model=dict)
 def get_principles(
     skip: int = 0,
     limit: int = 100,
@@ -58,7 +58,7 @@ def get_principles(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/", response_model=dict)
+@router.post("", response_model=dict)
 def create_principle(
     principle: PrincipleCreate,
     db: Session = Depends(get_db),
