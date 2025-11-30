@@ -81,14 +81,22 @@ export default function TradingPlanFormModal({
   // 보유 수량 (사용자가 직접 입력)
   const [holdingQuantity, setHoldingQuantity] = useState(0)
 
+  // ATR 계산 관련
+  const [atrValue, setAtrValue] = useState<number | null>(null)
+  const [atrLoading, setAtrLoading] = useState(false)
+  const [profitAtrMultiplier, setProfitAtrMultiplier] = useState('')
+  const [lossAtrMultiplier, setLossAtrMultiplier] = useState('')
+
   // 이 종목의 계획 목록
   const [plansList, setPlansList] = useState<TradingPlan[]>([])
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
 
-  // 모달이 열리거나 종목이 변경될 때 입력 필드 초기화
+  // 모달이 열리거나 종목이 변경될 때 입력 필드 초기화 및 ATR 자동 계산
   useEffect(() => {
     if (isOpen && stockCode) {
       clearForm()
+      // ATR 자동 계산 (배경에서 조용히 계산)
+      calculateATRAutomatically()
     }
   }, [isOpen, stockCode])
 
@@ -175,6 +183,109 @@ export default function TradingPlanFormModal({
     retry: 1,
   })
 
+  // ATR 자동 계산 함수 (모달 열릴 때 배경에서 자동 호출)
+  const calculateATRAutomatically = async () => {
+    if (!stockCode) {
+      console.log('📌 종목코드가 없어서 ATR 계산 스킵')
+      return
+    }
+
+    console.log(`🔄 ATR 자동 계산 시작: ${stockCode}`)
+    setAtrLoading(true)
+    try {
+      const url = `/api/stocks/${stockCode}/atr`
+      const response = await fetch(url, {
+        method: 'GET',
+      })
+
+      if (!response.ok) {
+        console.warn(`⚠️ ATR 조회 실패: ${response.status}`)
+        return
+      }
+
+      const result = await response.json()
+
+      if (result.data && result.data.atr_40d) {
+        const atrVal = result.data.atr_40d
+        setAtrValue(atrVal)
+        console.log(`✅ ATR 자동 계산 완료: ${atrVal.toFixed(2)}원`)
+      } else {
+        console.warn('⚠️ ATR 데이터 없음')
+      }
+    } catch (error) {
+      console.warn('⚠️ ATR 자동 계산 중 오류:', error)
+    } finally {
+      setAtrLoading(false)
+    }
+  }
+
+  // ATR 계산 함수 (이제 필요 없음 - 자동 계산으로 대체됨)
+  // 레거시 호환성을 위해 유지하지만 사용하지 않음
+  const calculateATR = async () => {
+    // 자동 계산 함수로 통합됨
+    console.log('⚠️ calculateATR 호출됨 (레거시) - 자동 계산 함수 사용')
+  }
+
+  // ATR 배수로 익절가 계산
+  const calculateProfitByAtr = () => {
+    // 입력값 검증
+    const profitMultiplier = parseFloat(profitAtrMultiplier)
+    const buyPriceNum = parseFloat(buyPrice)
+
+    if (!profitAtrMultiplier || isNaN(profitMultiplier)) {
+      alert('익절 배수를 입력해주세요. (예: 1.5)')
+      return
+    }
+
+    if (!buyPrice || isNaN(buyPriceNum)) {
+      alert('매수가를 입력해주세요.')
+      return
+    }
+
+    if (atrValue === null || atrValue === undefined || atrValue === 0) {
+      alert('먼저 "ATR 계산" 버튼을 클릭하여 ATR 값을 계산해주세요.')
+      return
+    }
+
+    const targetPrice = buyPriceNum + atrValue * profitMultiplier
+    const profitRatio = ((targetPrice - buyPriceNum) / buyPriceNum) * 100
+
+    setProfitTarget(targetPrice.toFixed(0))
+    setProfitRate(profitRatio.toFixed(2))
+    setProfitCondition(`ATR ${profitMultiplier}배 (${atrValue.toFixed(0)}원 × ${profitMultiplier})`)
+    console.log(`✅ 익절가 계산: ${targetPrice.toFixed(0)}원 (${profitRatio.toFixed(2)}%)`)
+  }
+
+  // ATR 배수로 손절가 계산
+  const calculateLossByAtr = () => {
+    // 입력값 검증
+    const lossMultiplier = parseFloat(lossAtrMultiplier)
+    const buyPriceNum = parseFloat(buyPrice)
+
+    if (!lossAtrMultiplier || isNaN(lossMultiplier)) {
+      alert('손절 배수를 입력해주세요. (예: 2.0)')
+      return
+    }
+
+    if (!buyPrice || isNaN(buyPriceNum)) {
+      alert('매수가를 입력해주세요.')
+      return
+    }
+
+    if (atrValue === null || atrValue === undefined || atrValue === 0) {
+      alert('먼저 "ATR 계산" 버튼을 클릭하여 ATR 값을 계산해주세요.')
+      return
+    }
+
+    const targetPrice = buyPriceNum - atrValue * lossMultiplier
+    const lossRatio = ((targetPrice - buyPriceNum) / buyPriceNum) * 100
+
+    setLossTarget(targetPrice.toFixed(0))
+    setLossRate(lossRatio.toFixed(2))
+    setLossCondition(`ATR ${lossMultiplier}배 손절 (${atrValue.toFixed(0)}원 × ${lossMultiplier})`)
+    console.log(`✅ 손절가 계산: ${targetPrice.toFixed(0)}원 (${lossRatio.toFixed(2)}%)`)
+  }
+
   // 입력 필드 초기화
   const clearForm = () => {
     setBuyPrice('')
@@ -194,6 +305,10 @@ export default function TradingPlanFormModal({
     setSellQuantity('')
     setSellCondition('')
     setSellReason('')
+
+    setProfitAtrMultiplier('')
+    setLossAtrMultiplier('')
+    setAtrValue(null)
 
     setTradeType('buy')
     setSelectedPlanId(null)
@@ -640,6 +755,36 @@ export default function TradingPlanFormModal({
                   {/* 익절 계획 */}
                   <div className="border-t pt-4 mt-4">
                     <h3 className="text-sm font-semibold text-gray-700 mb-3">익절 계획</h3>
+
+                    {/* ATR 기반 익절 설정 */}
+                    <div className="bg-blue-50 p-3 rounded-lg mb-4 border border-blue-200">
+                      <div className="mb-2">
+                        <span className="text-xs font-semibold text-blue-700">ATR 기반 익절 설정</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            배수 (배)
+                          </label>
+                          <input
+                            type="number"
+                            value={profitAtrMultiplier}
+                            onChange={(e) => setProfitAtrMultiplier(e.target.value)}
+                            placeholder="예: 1.5"
+                            step="0.1"
+                            min="0"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <button
+                          onClick={calculateProfitByAtr}
+                          className="col-span-2 py-1 px-2 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition-colors font-medium mt-auto"
+                        >
+                          익절가 계산하기
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="space-y-2">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -686,6 +831,36 @@ export default function TradingPlanFormModal({
                   {/* 손절 계획 */}
                   <div className="border-t pt-4 mt-4">
                     <h3 className="text-sm font-semibold text-gray-700 mb-3">손절 계획</h3>
+
+                    {/* ATR 기반 손절 설정 */}
+                    <div className="bg-red-50 p-3 rounded-lg mb-4 border border-red-200">
+                      <div className="mb-2">
+                        <span className="text-xs font-semibold text-red-700">ATR 기반 손절 설정</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            배수 (배)
+                          </label>
+                          <input
+                            type="number"
+                            value={lossAtrMultiplier}
+                            onChange={(e) => setLossAtrMultiplier(e.target.value)}
+                            placeholder="예: 2.0"
+                            step="0.1"
+                            min="0"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                          />
+                        </div>
+                        <button
+                          onClick={calculateLossByAtr}
+                          className="col-span-2 py-1 px-2 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors font-medium mt-auto"
+                        >
+                          손절가 계산하기
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="space-y-2">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
