@@ -33,8 +33,9 @@ export default function PrinciplesModal({ isOpen, onClose }: PrinciplesModalProp
 
   // Update local list when data is fetched
   useEffect(() => {
-    if (principlesData?.data) {
-      setLocalPrinciples(principlesData.data)
+    // axios로 받은 응답이므로 data.data로 접근해야 함
+    if (principlesData?.data?.data) {
+      setLocalPrinciples(principlesData.data.data)
     }
   }, [principlesData])
 
@@ -42,9 +43,11 @@ export default function PrinciplesModal({ isOpen, onClose }: PrinciplesModalProp
   const createMutation = useMutation({
     mutationFn: (principleText: string) =>
       principlesAPI.createPrinciple(principleText),
-    onSuccess: (data) => {
-      if (data?.data) {
-        setLocalPrinciples([data.data, ...localPrinciples])
+    onSuccess: (response) => {
+      // axios 응답이므로 response.data.data로 접근
+      const newPrinciple = response?.data?.data
+      if (newPrinciple) {
+        setLocalPrinciples([newPrinciple, ...localPrinciples])
         setInputValue('')
       }
     }
