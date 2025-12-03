@@ -72,7 +72,7 @@ class RecommendationService:
         condition_id: str = None,
         algorithm_id: int = None,
         db: Session = None,
-        stock_exchange_type: str = '%'  # '%': 전체, 'K': 코스피, 'Q': 코스닥
+        stock_exchange_type: str = '%'  # 'K': KRX
     ) -> bool:
         """
         조건식으로 종목을 검색하고 rec_stocks 테이블에 저장합니다.
@@ -223,7 +223,7 @@ def update_recommendation_stocks(
 
     try:
         service = RecommendationService(app_key, secret_key, account_no)
-        return service.search_and_update_rec_stocks(condition_name, algorithm_id, db)
+        return service.search_and_update_rec_stocks(condition_name, algorithm_id, db, stock_exchange_type='K')
 
     finally:
         db.close()
