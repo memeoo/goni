@@ -99,6 +99,8 @@ class KiwoomWebSocketClient:
                 # 조건식 검색 응답 (일반 조회 또는 실시간 조회)
                 elif trnm == 'CNSRREQ':
                     seq = response.get('seq')  # 조건식 ID
+                    if seq:
+                        seq = str(seq).strip()
                     logger.info(f'조건식 {seq} 검색 응답 수신: {len(response.get("data", []))}개 종목')
                     # 응답을 조건식 ID별로 저장
                     if seq:
@@ -244,6 +246,11 @@ class KiwoomWebSocketClient:
             if condition_id in self.response_queue:
                 del self.response_queue[condition_id]
 
+            # 조건 검색 목록 요청 (CNSRREQ 전에 CNSRLST를 먼저 호출해야 하는 경우가 있음)
+            logger.info("조건 검색 목록 요청 (Pre-check)")
+            await self.send_message({'trnm': 'CNSRLST'})
+            await asyncio.sleep(0.5)
+
             # 조건 검색 요청 구성 (search_type에 따라 다름)
             if search_type == '1':
                 # 실시간 조회 (ka10173): stex_tp 없음
@@ -255,14 +262,16 @@ class KiwoomWebSocketClient:
                 logger.info(f"조건 검색 요청 시작 (실시간): condition_id={condition_id}")
             else:
                 # 일반 조회 (ka10172): stex_tp, cont_yn, next_key 포함
+
                 request_param = {
-                    'trnm': 'CNSRREQ',
+                    'trnm': "CNSRREQ",
                     'seq': condition_id,
-                    'search_type': '0',  # 일반 조회
+                    'search_type': "0",  # 일반 조회
                     'stex_tp': stock_exchange_type,
                     'cont_yn': cont_yn,
                     'next_key': next_key
                 }
+
                 logger.info(f"조건 검색 요청 시작 (일반): condition_id={condition_id}, stex_tp={stock_exchange_type}")
 
             await self.send_message(request_param)
