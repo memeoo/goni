@@ -88,7 +88,7 @@ export default function RecommendationPage() {
         onRefresh={handleRefresh}
         onAddStock={handleAddStock}
         onStrategyManage={handleStrategyManage}
-        onPrincipleManage={() => {}}
+        onPrincipleManage={() => { }}
         isRefreshing={false}
       />
 
@@ -100,7 +100,7 @@ export default function RecommendationPage() {
             알고리즘 종목 추천
           </h2>
           <p className="text-sm sm:text-base text-gray-600">
-            고니 퀀트 알고리즘에 의해 매일 아침 7시에 제공되는 추천 종목
+            고니 퀀트 알고리즘으로 제공되는 추천 종목
           </p>
         </div>
 
