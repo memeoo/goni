@@ -72,7 +72,7 @@ class RecommendationService:
         condition_id: str = None,
         algorithm_id: int = None,
         db: Session = None,
-        stock_exchange_type: str = '%'  # 'K': KRX
+        stock_exchange_type: str = 'K'  # 'K': KRX
     ) -> bool:
         """
         조건식으로 종목을 검색하고 rec_stocks 테이블에 저장합니다.

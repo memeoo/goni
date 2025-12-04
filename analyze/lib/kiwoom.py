@@ -119,9 +119,14 @@ class KiwoomWebSocketClient:
                     self.response_data = response
 
             except websockets.ConnectionClosed:
-                logger.error('WebSocket 연결이 서버에 의해 종료됨')
-                self.connected = False
-                return False
+                if self.keep_running:
+                    logger.error('WebSocket 연결이 서버에 의해 종료됨')
+                    self.connected = False
+                    return False
+                else:
+                    logger.info('WebSocket 연결이 종료되었습니다 (정상 종료)')
+                    self.connected = False
+                    return False
             except asyncio.CancelledError:
                 logger.debug('메시지 수신 태스크가 취소됨')
                 return False

@@ -54,7 +54,7 @@ def update_rec_stocks_job():
                 condition_id='7',  # 신고가 돌파의 실제 ID
                 algorithm_id=1,
                 db=db,
-                stock_exchange_type='%'  # 전체
+                stock_exchange_type='K'  # 전체
             )
 
             if success:
@@ -103,7 +103,7 @@ def update_dae_wangkaemi_stocks_job():
                 condition_id='5',  # 대왕개미단타의 실제 ID
                 algorithm_id=2,
                 db=db,
-                stock_exchange_type='%'  # 전체
+                stock_exchange_type='K'  # 전체
             )
 
             if success:
@@ -134,8 +134,8 @@ def start_scheduler():
         scheduler.add_job(
             update_rec_stocks_job,
             trigger=CronTrigger(
-                hour=15,
-                minute=37,
+                hour=11,
+                minute=23,
                 day_of_week='0-4',  # 월-금요일만 (토일 제외)
                 timezone='Asia/Seoul'
             ),
@@ -148,7 +148,7 @@ def start_scheduler():
         scheduler.add_job(
             update_dae_wangkaemi_stocks_job,
             trigger=CronTrigger(
-                hour=14,
+                hour=11,
                 minute=22,
                 day_of_week='0-4',  # 월-금요일만 (토일 제외)
                 timezone='Asia/Seoul'

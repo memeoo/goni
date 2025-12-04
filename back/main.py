@@ -3,6 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
 import logging
+import sys
+import os
+
+# 현재 파일의 부모 디렉토리(back)의 부모 디렉토리(프로젝트 루트)를 sys.path에 추가
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import database
 from app.routers import auth, stocks, trading_plans, recap, trading, trading_stocks, stocks_info, algorithm, rec_stocks
