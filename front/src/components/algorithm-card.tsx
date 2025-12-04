@@ -9,6 +9,7 @@ interface Algorithm {
   description: string | null
   created_at?: string
   updated_at?: string
+  issue_time?: string
 }
 
 interface AlgorithmCardProps {
@@ -54,7 +55,7 @@ export default function AlgorithmCard({ algorithm, onClick }: AlgorithmCardProps
       {algorithm.created_at && (
         <div className="mt-3 pt-3 border-t border-gray-200">
           <p className="text-2xs sm:text-xs text-gray-400">
-            발행 시간: {new Date(algorithm.created_at).toLocaleDateString('ko-KR')}
+            발행 시간: {algorithm.issue_time}
           </p>
         </div>
       )}
